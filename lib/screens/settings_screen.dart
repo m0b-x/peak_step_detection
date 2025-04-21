@@ -1,4 +1,3 @@
-// lib/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/sensor_service.dart';
@@ -15,11 +14,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late SensorConfig draft;
   final _formKey = GlobalKey<FormState>();
 
+  final Map<String, TextEditingController> _controllers = {};
+
   @override
   void initState() {
     super.initState();
     final current = context.read<SensorService>().currentConfig;
     draft = current;
+
+    _initControllers();
+  }
+
+  void _initControllers() {
+    _controllers['pollingIntervalMs'] =
+        TextEditingController(text: draft.pollingIntervalMs.toString());
+    _controllers['userInterfaceUpdateIntervalMs'] = TextEditingController(
+        text: draft.userInterfaceUpdateIntervalMs.toString());
+    _controllers['warmUpDurationMs'] =
+        TextEditingController(text: draft.warmUpDurationMs.toString());
+
+    _controllers['filterOrder'] =
+        TextEditingController(text: draft.filterOrder.toString());
+    _controllers['filterCutoffFreq'] =
+        TextEditingController(text: draft.filterCutoffFreq.toString());
+
+    _controllers['accThreshold'] =
+        TextEditingController(text: draft.accThreshold.toString());
+    _controllers['gyroThreshold'] =
+        TextEditingController(text: draft.gyroThreshold.toString());
+
+    _controllers['accScale'] =
+        TextEditingController(text: draft.accelerometerScale.toString());
+    _controllers['gyroScale'] =
+        TextEditingController(text: draft.gyroScale.toString());
+    _controllers['magScale'] =
+        TextEditingController(text: draft.magScale.toString());
+
+    _controllers['shortStep'] =
+        TextEditingController(text: draft.shortStep.toString());
+    _controllers['mediumStep'] =
+        TextEditingController(text: draft.mediumStep.toString());
+    _controllers['longStep'] =
+        TextEditingController(text: draft.longStep.toString());
+
+    _controllers['bigStepThreshold'] =
+        TextEditingController(text: draft.bigStepThreshold.toString());
+    _controllers['mediumStepThreshold'] =
+        TextEditingController(text: draft.mediumStepThreshold.toString());
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -32,118 +81,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             const _SectionHeader('Sampling'),
+            _intField('Polling interval (ms)', 'pollingIntervalMs'),
             _intField(
-              label: 'Polling interval (ms)',
-              initial: draft.pollingIntervalMs,
-              onSaved: (v) => draft = draft.copyWith(pollingIntervalMs: v),
-            ),
+                'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
             SwitchListTile(
               title: const Text('Wait for sensors to warm up'),
               value: draft.warmUpSensors,
-              onChanged: (val) => setState(
-                () => draft = draft.copyWith(warmUpSensors: val),
-              ),
+              onChanged: (val) =>
+                  setState(() => draft = draft.copyWith(warmUpSensors: val)),
             ),
-            ListTile(
-              title: const Text('Warm-up duration (ms)'),
-              subtitle: Text('${draft.warmUpDurationMs} ms'),
-              trailing: SizedBox(
-                width: 100,
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  decoration:
-                      InputDecoration(hintText: '${draft.warmUpDurationMs}'),
-                  onSubmitted: (val) {
-                    final parsed = int.tryParse(val);
-                    if (parsed != null) {
-                      setState(() {
-                        draft = draft.copyWith(warmUpDurationMs: parsed);
-                      });
-                    }
-                  },
-                ),
-              ),
-            ),
+            _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
             SwitchListTile(
               title: const Text('Use system default interval'),
               value: draft.useSystemDefaultInterval,
               onChanged: (val) => setState(
-                () => draft = draft.copyWith(useSystemDefaultInterval: val),
-              ),
+                  () => draft = draft.copyWith(useSystemDefaultInterval: val)),
             ),
             const _SectionHeader('Filters'),
-            _intField(
-              label: 'Butterworth order',
-              initial: draft.filterOrder,
-              onSaved: (v) => draft = draft.copyWith(filterOrder: v),
-            ),
-            _doubleField(
-              label: 'Cut‑off freq',
-              initial: draft.filterCutoffFreq,
-              onSaved: (v) => draft = draft.copyWith(filterCutoffFreq: v),
-            ),
+            _intField('Butterworth order', 'filterOrder'),
+            _doubleField('Cut‑off freq', 'filterCutoffFreq'),
             const _SectionHeader('Thresholds'),
-            _doubleField(
-              label: 'Acc threshold',
-              initial: draft.accThreshold,
-              onSaved: (v) => draft = draft.copyWith(accThreshold: v),
-            ),
-            _doubleField(
-              label: 'Gyro threshold',
-              initial: draft.gyroThreshold,
-              onSaved: (v) => draft = draft.copyWith(gyroThreshold: v),
-            ),
+            _doubleField('Acc net magnitude threshold', 'accThreshold'),
+            _doubleField('Gyro net magnitude threshold', 'gyroThreshold'),
             const _SectionHeader('Scaling factors'),
-            _tripleRow(
-              children: [
-                _doubleFieldMini(
-                  label: 'Acc',
-                  initial: draft.accelerometerScale,
-                  onSaved: (v) => draft = draft.copyWith(accScale: v),
-                ),
-                _doubleFieldMini(
-                  label: 'Gyro',
-                  initial: draft.gyroScale,
-                  onSaved: (v) => draft = draft.copyWith(gyroScale: v),
-                ),
-                _doubleFieldMini(
-                  label: 'Mag',
-                  initial: draft.magScale,
-                  onSaved: (v) => draft = draft.copyWith(magScale: v),
-                ),
-              ],
-            ),
+            _tripleRow([
+              _doubleFieldMini('Acc', 'accScale', requiresPositive: true),
+              _doubleFieldMini('Gyro', 'gyroScale', requiresPositive: true),
+              _doubleFieldMini('Mag', 'magScale', requiresPositive: true),
+            ]),
             const _SectionHeader('Step lengths (m)'),
-            _tripleRow(
-              children: [
-                _doubleFieldMini(
-                  label: 'Short',
-                  initial: draft.shortStep,
-                  onSaved: (v) => draft = draft.copyWith(shortStep: v),
-                ),
-                _doubleFieldMini(
-                  label: 'Medium',
-                  initial: draft.mediumStep,
-                  onSaved: (v) => draft = draft.copyWith(mediumStep: v),
-                ),
-                _doubleFieldMini(
-                  label: 'Long',
-                  initial: draft.longStep,
-                  onSaved: (v) => draft = draft.copyWith(longStep: v),
-                ),
-              ],
-            ),
+            _tripleRow([
+              _doubleFieldMini('Short', 'shortStep'),
+              _doubleFieldMini('Medium', 'mediumStep'),
+              _doubleFieldMini('Long', 'longStep'),
+            ]),
             const _SectionHeader('Step thresholds'),
-            _doubleField(
-              label: 'Big‑step threshold',
-              initial: draft.bigStepThreshold,
-              onSaved: (v) => draft = draft.copyWith(bigStepThreshold: v),
-            ),
-            _doubleField(
-              label: 'Medium‑step threshold',
-              initial: draft.mediumStepThreshold,
-              onSaved: (v) => draft = draft.copyWith(mediumStepThreshold: v),
-            ),
+            _doubleField('Big‑step threshold', 'bigStepThreshold'),
+            _doubleField('Medium‑step threshold', 'mediumStepThreshold'),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               icon: const Icon(Icons.save),
@@ -157,61 +131,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /* ───────────────────── helpers ───────────────────── */
-
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
 
-    // push new config into service
-    context.read<SensorService>().updateConfig(draft);
+    setState(() {
+      draft = draft.copyWith(
+        pollingIntervalMs:
+            int.parse(_controllers['pollingIntervalMs']!.text.trim()),
+        userInterfaceUpdateIntervalMs: int.parse(
+            _controllers['userInterfaceUpdateIntervalMs']!.text.trim()),
+        warmUpDurationMs:
+            int.parse(_controllers['warmUpDurationMs']!.text.trim()),
+        filterOrder: int.parse(_controllers['filterOrder']!.text.trim()),
+        filterCutoffFreq:
+            double.parse(_controllers['filterCutoffFreq']!.text.trim()),
+        accThreshold: double.parse(_controllers['accThreshold']!.text.trim()),
+        gyroThreshold: double.parse(_controllers['gyroThreshold']!.text.trim()),
+        accScale: double.parse(_controllers['accScale']!.text.trim()),
+        gyroScale: double.parse(_controllers['gyroScale']!.text.trim()),
+        magScale: double.parse(_controllers['magScale']!.text.trim()),
+        shortStep: double.parse(_controllers['shortStep']!.text.trim()),
+        mediumStep: double.parse(_controllers['mediumStep']!.text.trim()),
+        longStep: double.parse(_controllers['longStep']!.text.trim()),
+        bigStepThreshold:
+            double.parse(_controllers['bigStepThreshold']!.text.trim()),
+        mediumStepThreshold:
+            double.parse(_controllers['mediumStepThreshold']!.text.trim()),
+      );
+    });
+
+    final didWarmup = context.read<SensorService>().updateConfig(draft);
+
+    if (!didWarmup && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Settings applied instantly'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
     Navigator.of(context).pop();
   }
 
-  Widget _intField({
-    required String label,
-    required int initial,
-    required void Function(int) onSaved,
-  }) =>
-      TextFormField(
-        initialValue: initial.toString(),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: initial.toString(),
-        ),
+  Widget _intField(String label, String key) => TextFormField(
+        controller: _controllers[key],
+        decoration: InputDecoration(labelText: label),
         keyboardType: TextInputType.number,
         validator: (v) =>
-            int.tryParse(v ?? '') == null ? 'Enter integer' : null,
-        onSaved: (v) => onSaved(int.parse(v!)),
+            int.tryParse(v ?? '') == null ? 'Enter an integer' : null,
       );
 
-  Widget _doubleField({
-    required String label,
-    required double initial,
-    required void Function(double) onSaved,
-  }) =>
+  Widget _doubleField(String label, String key,
+          {bool requiresPositive = false}) =>
       TextFormField(
-        initialValue: initial.toString(),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: initial.toString(),
-        ),
+        controller: _controllers[key],
+        decoration: InputDecoration(labelText: label),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: (v) =>
-            double.tryParse(v ?? '') == null ? 'Enter number' : null,
-        onSaved: (v) => onSaved(double.parse(v!)),
+        validator: (v) {
+          final val = double.tryParse(v ?? '');
+          if (val == null) return 'Enter a number';
+          if (requiresPositive && val <= 0) return 'Enter a positive number';
+          return null;
+        },
       );
 
-  Widget _doubleFieldMini({
-    required String label,
-    required double initial,
-    required void Function(double) onSaved,
-  }) =>
+  Widget _doubleFieldMini(String label, String key,
+          {bool requiresPositive = false}) =>
       Expanded(
-        child: _doubleField(label: label, initial: initial, onSaved: onSaved),
+        child: _doubleField(label, key, requiresPositive: requiresPositive),
       );
 
-  Widget _tripleRow({required List<Widget> children}) => Padding(
+  Widget _tripleRow(List<Widget> children) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
@@ -227,13 +218,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader(this.text);
   final String text;
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: 16, bottom: 8),
-        child: Text(text,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium!
-                .copyWith(fontWeight: FontWeight.bold)),
+        child: Text(
+          text,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium!
+              .copyWith(fontWeight: FontWeight.bold),
+        ),
       );
 }

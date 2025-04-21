@@ -4,6 +4,7 @@ class SensorConfig {
 
   final bool useSystemDefaultInterval;
   final int pollingIntervalMs;
+  final int userInterfaceUpdateIntervalMs;
 
   final int filterOrder;
   final double filterCutoffFreq;
@@ -26,6 +27,7 @@ class SensorConfig {
   const SensorConfig({
     this.useSystemDefaultInterval = false,
     this.pollingIntervalMs = 200,
+    this.userInterfaceUpdateIntervalMs = 100,
     this.filterOrder = 2,
     this.filterCutoffFreq = 2.0,
     this.bandPassCenter = 0.0,
@@ -48,6 +50,7 @@ class SensorConfig {
     // Sampling
     bool? useSystemDefaultInterval,
     int? pollingIntervalMs,
+    int? userInterfaceUpdateIntervalMs,
     // Filter
     int? filterOrder,
     double? filterCutoffFreq,
@@ -74,6 +77,8 @@ class SensorConfig {
       useSystemDefaultInterval:
           useSystemDefaultInterval ?? this.useSystemDefaultInterval,
       pollingIntervalMs: pollingIntervalMs ?? this.pollingIntervalMs,
+      userInterfaceUpdateIntervalMs:
+          userInterfaceUpdateIntervalMs ?? this.userInterfaceUpdateIntervalMs,
       filterOrder: filterOrder ?? this.filterOrder,
       filterCutoffFreq: filterCutoffFreq ?? this.filterCutoffFreq,
       bandPassCenter: bandPassCenter ?? this.bandPassCenter,

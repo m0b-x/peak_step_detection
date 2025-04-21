@@ -1,93 +1,86 @@
 import 'package:flutter/material.dart';
+import 'dart:math' show max;
 
 class GraphPainter extends CustomPainter {
+  GraphPainter(this.points, this.color);
+
   final List<double> points;
   final Color color;
 
-  GraphPainter(this.points, this.color);
+  /* simple cache: yScale*100 → list of 6 label painters */
+  static final _cache = <int, List<TextPainter>>{};
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.length < 2) return;
 
-    const double leftPadding = 45;
-    final graphWidth = size.width - leftPadding;
+    const leftPad = 45.0;
+    final graphW = size.width - leftPad;
 
-    final Paint gridPaint = Paint()
+    final gridPaint = Paint()
       ..color = Colors.grey.withValues(alpha: 0.4)
-      ..strokeWidth = 0.5;
-
-    final Paint axisPaint = Paint()
-      ..color = Colors.grey
-      ..strokeWidth = 1;
-
-    final Paint linePaint = Paint()
+      ..strokeWidth = .5;
+    final axisPaint = Paint()..color = Colors.grey;
+    final linePaint = Paint()
       ..color = color
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    final textPainter = TextPainter(
-      textAlign: TextAlign.right,
-      textDirection: TextDirection.ltr,
-    );
-
-    final double dx = graphWidth / (points.length - 1);
-    final double maxVal =
-        points.map((e) => e.abs()).reduce((a, b) => a > b ? a : b);
+    final dx = graphW / (points.length - 1);
+    final maxVal = points.fold<double>(0, (m, e) => max(m, e.abs()));
     final yScale = maxVal == 0 ? 1 : maxVal;
 
-    const int gridLines = 5;
-    for (int i = 0; i <= gridLines; i++) {
-      double y = size.height * i / gridLines;
-      canvas.drawLine(Offset(leftPadding, y), Offset(size.width, y), gridPaint);
+    /* ───── grid & labels ───── */
+    const gridLines = 5;
+    final cacheKey = (yScale * 100).round();
+    final labels = _cache.putIfAbsent(cacheKey, () {
+      const style = TextStyle(color: Colors.black87, fontSize: 12);
+      return List.generate(gridLines + 1, (i) {
+        final value = (0.5 - i / gridLines) * 2 * yScale;
+        final tp = TextPainter(
+          text: TextSpan(text: value.toStringAsFixed(2), style: style),
+          textAlign: TextAlign.right,
+          textDirection: TextDirection.ltr,
+        )..layout(minWidth: 0, maxWidth: leftPad - 4);
+        return tp;
+      });
+    });
 
-      // Y-axis label
-      final double value = (0.5 - i / gridLines) * 2 * yScale;
-      textPainter.text = TextSpan(
-        text: value.toStringAsFixed(2),
-        style: const TextStyle(color: Colors.black87, fontSize: 12),
-      );
-      textPainter.layout(minWidth: 0, maxWidth: leftPadding - 4);
-      textPainter.paint(canvas, Offset(0, y - textPainter.height / 2));
+    for (var i = 0; i <= gridLines; i++) {
+      final y = size.height * i / gridLines;
+      canvas.drawLine(Offset(leftPad, y), Offset(size.width, y), gridPaint);
+      labels[i].paint(canvas, Offset(0, y - labels[i].height / 2));
     }
 
-    // Draw central horizontal X-axis
+    /* axes */
     final midY = size.height / 2;
-    canvas.drawLine(
-        Offset(leftPadding, midY), Offset(size.width, midY), axisPaint);
+    canvas.drawLine(Offset(leftPad, midY), Offset(size.width, midY), axisPaint);
 
-    // Y-axis label
-    textPainter.text = const TextSpan(
-      text: 'Y',
-      style: TextStyle(
-        color: Colors.grey,
-        fontSize: 13,
-        fontWeight: FontWeight.bold,
-      ),
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, const Offset(8, 4));
+    _drawStaticLabel(
+        canvas,
+        'Y',
+        const Offset(8, 4),
+        const TextStyle(
+            color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold));
+    _drawStaticLabel(canvas, 'Time →', Offset(size.width - 55, midY + 4),
+        const TextStyle(color: Colors.grey, fontSize: 12));
 
-    // X-axis label
-    textPainter.text = const TextSpan(
-      text: 'Time →',
-      style: TextStyle(color: Colors.grey, fontSize: 12),
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(size.width - 55, midY + 4));
-
-    // Draw graph path
-    final Path path = Path();
-    for (int i = 0; i < points.length; i++) {
-      final x = leftPadding + i * dx;
+    /* line path */
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final x = leftPad + i * dx;
       final y = size.height * (0.5 - points[i] / yScale / 2);
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+      i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
     }
     canvas.drawPath(path, linePaint);
+  }
+
+  void _drawStaticLabel(Canvas c, String txt, Offset pos, TextStyle style) {
+    final tp = TextPainter(
+        text: TextSpan(text: txt, style: style),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    tp.paint(c, pos);
   }
 
   @override

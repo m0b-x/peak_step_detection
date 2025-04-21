@@ -1,8 +1,6 @@
 import 'dart:math';
 
 class OrientationCalculator {
-  double ax, ay, az, mx, my, mz, L;
-
   OrientationCalculator({
     required this.ax,
     required this.ay,
@@ -11,7 +9,9 @@ class OrientationCalculator {
     required this.my,
     required this.mz,
     required this.L,
-  });
+  }) : assert(L > 1e-6, 'Vector magnitude L must be non‑zero');
+
+  double ax, ay, az, mx, my, mz, L;
 
   double calculateYaw() {
     return atan2(
