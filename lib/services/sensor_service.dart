@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:iirjdart/butterworth.dart';
@@ -445,7 +444,20 @@ class SensorService extends ChangeNotifier {
   void _flushSensorUpdates() {
     if (_updateScheduled) return;
 
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final elapsed = now - _lastNotifyTimeMs;
+
+    if (elapsed < _minNotifyIntervalMs) {
+      // Not enough time passed → schedule later
+      final delay = Duration(milliseconds: _minNotifyIntervalMs - elapsed);
+      _updateScheduled = true;
+      Future.delayed(delay, _flushSensorUpdates);
+      return;
+    }
+
+    _lastNotifyTimeMs = now;
     _updateScheduled = true;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateScheduled = false;
 
