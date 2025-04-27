@@ -1,39 +1,68 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:iirjdart/butterworth.dart';
-
+import 'package:study_step_detection/utils/raw_accelerometer_sample.dart';
+import 'package:study_step_detection/utils/sensor_utils.dart';
 import '../config/sensor_config.dart';
+import '../utils/circular_buffer.dart';
 
 class SensorService extends ChangeNotifier {
   SensorService(this._config) {
+    _initDebounce();
+    _initBuffers();
     _initSensors();
   }
+
+  int _lastNotifyTimeMs = 0;
+  int _minNotifyIntervalMs = 16;
+  bool _updateScheduled = false;
 
   Timer? _updateTimer;
   Timer? _warmupTimer;
   bool _accDirty = false, _gyroDirty = false, _magDirty = false;
-
   final ValueNotifier<bool> _isWarmingUp = ValueNotifier(true);
   ValueNotifier<bool> get isWarmingUp => _isWarmingUp;
+
+  final ValueNotifier<List<RawAccelerometerSample>> rawAccSeries =
+      ValueNotifier([]);
+  late final CircularBuffer<RawAccelerometerSample> _rawAccBuffer;
+  final ValueNotifier<bool> peakDetectedNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> endDetectedNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> fakePeakDetectedNotifier = ValueNotifier(false);
 
   AccelerometerEvent? _lastAcc;
   GyroscopeEvent? _lastGyro;
   MagnetometerEvent? _lastMag;
-
   AccelerometerEvent? get latestAcc => _lastAcc;
   GyroscopeEvent? get latestGyro => _lastGyro;
   MagnetometerEvent? get latestMag => _lastMag;
+  double _currentAccZMax = double.negativeInfinity;
+  double _currentAccZMin = double.infinity;
 
-  double get accMagnitude =>
-      _lastAcc == null ? 0 : _vectorNorm(_lastAcc!.x, _lastAcc!.y, _lastAcc!.z);
+  double get accMagnitude => _lastAcc == null
+      ? 0
+      : sqrt(
+          SensorUtils.vectorNormSquared(_lastAcc!.x, _lastAcc!.y, _lastAcc!.z));
   double get gyroMagnitude => _lastGyro == null
       ? 0
-      : _vectorNorm(_lastGyro!.x, _lastGyro!.y, _lastGyro!.z);
-  double get magMagnitude =>
-      _lastMag == null ? 0 : _vectorNorm(_lastMag!.x, _lastMag!.y, _lastMag!.z);
+      : sqrt(SensorUtils.vectorNormSquared(
+          _lastGyro!.x, _lastGyro!.y, _lastGyro!.z));
+  double get magMagnitude => _lastMag == null
+      ? 0
+      : sqrt(
+          SensorUtils.vectorNormSquared(_lastMag!.x, _lastMag!.y, _lastMag!.z));
 
+  double _filteredAcc = 0.0;
+  double get filteredAcc => _filteredAcc;
+
+  double _gyroAbsNet = 0.0;
+  double get gyroAbsNet => _gyroAbsNet;
+
+  double _avgAccMag = 0, _avgGyroMag = 0, _avgMagMag = 0;
   double get accAvgMagnitude => _avgAccMag;
   double get gyroAvgMagnitude => _avgGyroMag;
   double get magAvgMagnitude => _avgMagMag;
@@ -42,8 +71,6 @@ class SensorService extends ChangeNotifier {
   double get gyroNetMagnitude => gyroMagnitude - _avgGyroMag;
   double get magNetMagnitude => magMagnitude - _avgMagMag;
 
-  double _avgAccMag = 0, _avgGyroMag = 0, _avgMagMag = 0;
-
   SensorConfig _config;
   SensorConfig get currentConfig => _config;
 
@@ -51,50 +78,80 @@ class SensorService extends ChangeNotifier {
   final ValueNotifier<List<double>> gyroSeries = ValueNotifier(<double>[]);
   final ValueNotifier<List<double>> magSeries = ValueNotifier(<double>[]);
 
-  final _accelerometerHistory = <double>[];
-  final _gyroHistory = <double>[];
-  final _magnetometerHistory = <double>[];
+  static const int _maxGraphPoints = 100;
+  late final CircularBuffer<double> _accelerometerHistory =
+      CircularBuffer<double>(_maxGraphPoints);
+  late final CircularBuffer<double> _gyroHistory =
+      CircularBuffer<double>(_maxGraphPoints);
+  late final CircularBuffer<double> _magnetometerHistory =
+      CircularBuffer<double>(_maxGraphPoints);
+
+  int get _maxAvgCount => _config.maxWindowSize;
+  late CircularBuffer<double> _accWinBuffer =
+      CircularBuffer<double>(_maxAvgCount);
+  late CircularBuffer<double> _gyroWinBuffer =
+      CircularBuffer<double>(_maxAvgCount);
+  late CircularBuffer<double> _magWinBuffer =
+      CircularBuffer<double>(_maxAvgCount);
+
+  double _accWinSum = 0;
+  double _gyroWinSum = 0;
+  double _magWinSum = 0;
 
   int _stepCount = 0;
   double _distance = 0.0;
   int get stepCount => _stepCount;
   double get distance => _distance;
 
-  static const int _vecLen = 3;
-  final _startVector = <double>[];
-  final _peakVector = <double>[];
-  final _endVector = <double>[];
+  late final CircularBuffer<double> _startVector;
+  late final CircularBuffer<double> _peakVector;
+  late final CircularBuffer<double> _endVector;
+  late final CircularBuffer<double> _magnitudeSampleBuffer;
+
   bool _peakDetected = false;
 
+  int _lastStepTimestamp = 0;
+  int get _minStepGapMs => _config.minStepGapMs;
+
   late Butterworth _lowPass;
-
-  static const int _maxAvgCount = 3;
-  static const int _maxGraphPoints = 100;
-
-  final _accWinBuffer = <double>[];
-  final _gyroWinBuffer = <double>[];
-  final _magWinBuffer = <double>[];
-
   StreamSubscription<AccelerometerEvent>? _accSub;
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<MagnetometerEvent>? _magSub;
 
+  static const double _maleStepLengthFactor = 0.415;
+  static const double _femaleStepLengthFactor = 0.413;
+
+  void _initDebounce() {
+    final view = ui.PlatformDispatcher.instance.views.firstOrNull;
+    if (view != null) {
+      final rate = view.display.refreshRate;
+      if (rate > 1.0) {
+        _minNotifyIntervalMs = (1000 / rate).round();
+      }
+    }
+  }
+
+  void _initBuffers() {
+    _startVector = CircularBuffer<double>(_config.startVectorSize);
+    _peakVector = CircularBuffer<double>(_config.peakVectorSize);
+    _endVector = CircularBuffer<double>(_config.endVectorSize);
+    _magnitudeSampleBuffer = CircularBuffer<double>(
+        (_config.startVectorSize + _config.endVectorSize));
+    _rawAccBuffer = CircularBuffer<RawAccelerometerSample>(100);
+  }
+
   Future<void> _initSensors() async {
     _initFilters();
-
     _isWarmingUp.value = _config.warmUpSensors;
     _subscribeSensors();
-
     _updateTimer?.cancel();
     _updateTimer = Timer.periodic(
       Duration(milliseconds: _config.userInterfaceUpdateIntervalMs),
       (_) => _flushSensorUpdates(),
     );
-
     if (_config.warmUpSensors) {
       await Future.delayed(Duration(milliseconds: _config.warmUpDurationMs));
     }
-
     _isWarmingUp.value = false;
     notifyListeners();
   }
@@ -142,20 +199,23 @@ class SensorService extends ChangeNotifier {
     _gyroHistory.clear();
     _magnetometerHistory.clear();
     if (!isWarmingUp.value) {
-      accSeries.value = List.unmodifiable(_accelerometerHistory);
-      gyroSeries.value = List.unmodifiable(_gyroHistory);
-      magSeries.value = List.unmodifiable(_magnetometerHistory);
+      accSeries.value = _accelerometerHistory.toList(growable: false);
+      gyroSeries.value = _gyroHistory.toList(growable: false);
+      magSeries.value = _magnetometerHistory.toList(growable: false);
     }
   }
 
   bool updateConfig(SensorConfig newConfig) {
     newConfig = newConfig.copyWith(
-      accScale: _sanitizePos(newConfig.accelerometerScale),
-      gyroScale: _sanitizePos(newConfig.gyroScale),
-      magScale: _sanitizePos(newConfig.magScale),
-      accThreshold: _sanitizePos(newConfig.accThreshold),
-      gyroThreshold: _sanitizePos(newConfig.gyroThreshold),
+      accScale: SensorUtils.sanitizePos(newConfig.accScale),
+      gyroScale: SensorUtils.sanitizePos(newConfig.gyroScale),
+      magScale: SensorUtils.sanitizePos(newConfig.magScale),
+      accThreshold: SensorUtils.sanitizePos(newConfig.accThreshold),
+      gyroThreshold: SensorUtils.sanitizePos(newConfig.gyroThreshold),
     );
+    final vectorSizeChanged =
+        newConfig.startVectorSize != _config.startVectorSize ||
+            newConfig.endVectorSize != _config.endVectorSize;
 
     final pollingChanged = newConfig.pollingIntervalMs !=
             _config.pollingIntervalMs ||
@@ -164,8 +224,14 @@ class SensorService extends ChangeNotifier {
         newConfig.filterCutoffFreq != _config.filterCutoffFreq;
     final uiIntervalChanged = newConfig.userInterfaceUpdateIntervalMs !=
         _config.userInterfaceUpdateIntervalMs;
+    final windowChanged = newConfig.maxWindowSize != _config.maxWindowSize;
 
     _config = newConfig;
+    if (vectorSizeChanged) {
+      _startVector = CircularBuffer<double>(_config.startVectorSize);
+      _endVector = CircularBuffer<double>(_config.endVectorSize);
+      _peakVector.clear();
+    }
 
     if (pollingChanged) {
       _accSub?.cancel();
@@ -182,6 +248,11 @@ class SensorService extends ChangeNotifier {
       _peakVector.clear();
       _endVector.clear();
     }
+    if (windowChanged) {
+      _accWinBuffer = CircularBuffer<double>(_maxAvgCount);
+      _gyroWinBuffer = CircularBuffer<double>(_maxAvgCount);
+      _magWinBuffer = CircularBuffer<double>(_maxAvgCount);
+    }
     if (uiIntervalChanged) {
       _updateTimer?.cancel();
       _updateTimer = Timer.periodic(
@@ -192,7 +263,7 @@ class SensorService extends ChangeNotifier {
 
     final needsWarm =
         (pollingChanged || filterChanged) && newConfig.warmUpSensors;
-    _warmupTimer?.cancel(); // cancel any previous warm‑up
+    _warmupTimer?.cancel();
     if (needsWarm) {
       _isWarmingUp.value = true;
       _warmupTimer = Timer(
@@ -205,116 +276,198 @@ class SensorService extends ChangeNotifier {
     return needsWarm;
   }
 
-  double _sanitizePos(double v) => v <= 0 ? 1.0 : v;
+  void _onAccelerometer(AccelerometerEvent accEvent) {
+    _lastAcc = accEvent;
+    final magSq =
+        SensorUtils.vectorNormSquared(accEvent.x, accEvent.y, accEvent.z);
+    if (!SensorUtils.isFinite(magSq)) return;
 
-  void _onAccelerometer(AccelerometerEvent e) {
-    _lastAcc = e;
-    final mag = _vectorNorm(e.x, e.y, e.z);
-    if (!_isFinite(mag)) return;
+    final mag = sqrt(magSq);
 
-    _pushWindow(_accWinBuffer, mag);
-    _avgAccMag = _avgWindow(_accWinBuffer);
-    final filtered = _lowPass.filter(mag - _avgAccMag);
+    _accWinSum += mag;
+    if (_accWinBuffer.length == _accWinBuffer.capacity) {
+      _accWinSum -= _accWinBuffer[0];
+    }
+    SensorUtils.pushWindow(_accWinBuffer, mag);
+    _avgAccMag = _accWinSum / _accWinBuffer.length;
 
-    _pushGraph(_accelerometerHistory, _config.accelerometerScale * filtered);
+    final netMag = mag - _avgAccMag;
+    _filteredAcc = _lowPass.filter(netMag);
+
+    SensorUtils.pushGraph(
+        _accelerometerHistory, _config.accScale * _filteredAcc);
     _accDirty = true;
-    _detectStep(filtered);
+
+    final rawSample =
+        RawAccelerometerSample(accEvent.x, accEvent.y, accEvent.z);
+    _rawAccBuffer.add(rawSample);
+    rawAccSeries.value = _rawAccBuffer.toList(growable: false);
+
+    _detectStep(_filteredAcc, accEvent.z);
   }
 
   void _onGyroscope(GyroscopeEvent e) {
     _lastGyro = e;
-    final mag = _vectorNorm(e.x, e.y, e.z);
-    _pushWindow(_gyroWinBuffer, mag);
-    _avgGyroMag = _avgWindow(_gyroWinBuffer);
-    _pushGraph(_gyroHistory, _config.gyroScale * (mag - _avgGyroMag).abs());
+    final magSq = SensorUtils.vectorNormSquared(e.x, e.y, e.z);
+    final mag = sqrt(magSq);
+
+    _gyroWinSum += mag;
+    if (_gyroWinBuffer.length == _gyroWinBuffer.capacity) {
+      _gyroWinSum -= _gyroWinBuffer[0];
+    }
+    SensorUtils.pushWindow(_gyroWinBuffer, mag);
+    _avgGyroMag = _gyroWinSum / _gyroWinBuffer.length;
+
+    _gyroAbsNet = (mag - _avgGyroMag).abs();
+
+    SensorUtils.pushGraph(_gyroHistory, _config.gyroScale * _gyroAbsNet);
     _gyroDirty = true;
   }
 
   void _onMagnetometer(MagnetometerEvent e) {
     _lastMag = e;
-    final mag = _vectorNorm(e.x, e.y, e.z);
-    _pushWindow(_magWinBuffer, mag);
-    _avgMagMag = _avgWindow(_magWinBuffer);
-    _pushGraph(
-        _magnetometerHistory, _config.magScale * (mag - _avgMagMag).abs());
+    final magSq = SensorUtils.vectorNormSquared(e.x, e.y, e.z);
+    final mag = sqrt(magSq);
+
+    _magWinSum += mag;
+    if (_magWinBuffer.length == _magWinBuffer.capacity) {
+      _magWinSum -= _magWinBuffer[0];
+    }
+    SensorUtils.pushWindow(_magWinBuffer, mag);
+    _avgMagMag = _magWinSum / _magWinBuffer.length;
+
+    SensorUtils.pushGraph(_magnetometerHistory, _config.magScale * _avgMagMag);
     _magDirty = true;
   }
 
-  void _detectStep(double v) {
-    _startVector.add(v);
-    if (_startVector.length > _vecLen) _startVector.removeAt(0);
+  void _detectStep(
+      double filteredNetMagnitude, double zAccelerometerComponent) {
+    final now = DateTime.now().millisecondsSinceEpoch;
 
-    if (_isRising(_startVector) && v > _config.accThreshold) {
+    _startVector.add(filteredNetMagnitude);
+    _magnitudeSampleBuffer.add(filteredNetMagnitude);
+
+    if (zAccelerometerComponent > _currentAccZMax) {
+      _currentAccZMax = zAccelerometerComponent;
+    }
+    if (zAccelerometerComponent < _currentAccZMin) {
+      _currentAccZMin = zAccelerometerComponent;
+    }
+
+    if (SensorUtils.isRising(_startVector) &&
+        filteredNetMagnitude > _config.accThreshold) {
       _peakDetected = true;
-      _peakVector.add(v);
-      if (_peakVector.length > _vecLen) _peakVector.removeAt(0);
+      _peakVector.add(filteredNetMagnitude);
+      peakDetectedNotifier.value = true;
+      Future.delayed(const Duration(milliseconds: 300), () {
+        peakDetectedNotifier.value = false;
+      });
     }
 
     if (_peakDetected) {
-      _endVector.add(v);
-      if (_endVector.length > _vecLen) _endVector.removeAt(0);
+      _endVector.add(filteredNetMagnitude);
 
-      if (_isFalling(_endVector)) {
-        final maxPeak = _peakVector.reduce(max);
-        final stepLen = maxPeak > _config.bigStepThreshold
-            ? _config.longStep
-            : maxPeak > _config.mediumStepThreshold
-                ? _config.mediumStep
-                : _config.shortStep;
+      if (SensorUtils.isFalling(_endVector)) {
+        final timeSinceLastStep = now - _lastStepTimestamp;
 
-        _distance += stepLen;
-        _stepCount++;
-        notifyListeners();
+        if (_avgGyroMag >= _config.gyroThreshold) {
+          _onFakePeakDetected();
+          return;
+        }
 
-        _peakVector.clear();
-        _peakDetected = false;
+        if (timeSinceLastStep >= _minStepGapMs) {
+          final stepLength = _estimateStepLength(
+              _currentAccZMax, _currentAccZMin, _magnitudeSampleBuffer);
+          _distance += stepLength;
+          _stepCount++;
+          _lastStepTimestamp = now;
+          notifyListeners();
+        }
+        _resetAfterValidStep();
+      } else if (_endVector.length >= _config.endVectorSize) {
+        _onFakePeakDetected();
       }
     }
   }
 
-  bool _isRising(List<double> v) =>
-      v.length >= 2 &&
-      List.generate(v.length - 1, (i) => v[i + 1] > v[i]).every((e) => e);
-  bool _isFalling(List<double> v) =>
-      v.length >= 2 &&
-      List.generate(v.length - 1, (i) => v[i + 1] < v[i]).every((e) => e);
+  void _onFakePeakDetected() {
+    fakePeakDetectedNotifier.value = true;
+    Future.delayed(const Duration(milliseconds: 300), () {
+      fakePeakDetectedNotifier.value = false;
+    });
 
-  static double _vectorNorm(num x, num y, num z) =>
-      sqrt((x * x + y * y + z * z).toDouble());
-  static bool _isFinite(double v) => v.isFinite && v < double.maxFinite;
+    _peakVector.clear();
+    _endVector.clear();
+    _peakDetected = false;
 
-  static void _pushWindow(List<double> b, double v) {
-    b.add(v);
-    if (b.length > _maxAvgCount) b.removeAt(0);
+    _currentAccZMax = double.negativeInfinity;
+    _currentAccZMin = double.infinity;
+    _magnitudeSampleBuffer.clear();
   }
 
-  static double _avgWindow(List<double> b) =>
-      b.isEmpty ? 0 : b.reduce((a, b) => a + b) / b.length;
+  void _resetAfterValidStep() {
+    _peakVector.clear();
+    _peakDetected = false;
+    endDetectedNotifier.value = true;
 
-  static void _pushGraph(List<double> buf, double v) {
-    buf.add(v);
-    if (buf.length > _maxGraphPoints) {
-      buf.removeRange(0, buf.length - _maxGraphPoints);
+    _currentAccZMax = double.negativeInfinity;
+    _currentAccZMin = double.infinity;
+    _magnitudeSampleBuffer.clear();
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      endDetectedNotifier.value = false;
+    });
+  }
+
+  double _estimateStepLength(
+      double amax, double amin, CircularBuffer<double> verticalAccSamples) {
+    var kGenderFactor =
+        (_config.isMale ? _maleStepLengthFactor : _femaleStepLengthFactor);
+
+    switch (_config.stepModel) {
+      case StepModel.staticHeightAndGender:
+        return kGenderFactor * _config.heightMeters;
+
+      case StepModel.weinbergMethod:
+        final diff = amax - amin;
+        return kGenderFactor * pow(diff, _config.weinbergKPowFactor);
+
+      case StepModel.meanAbs:
+        double sumAbs = 0.0;
+        for (var i = 0; i < verticalAccSamples.length; i++) {
+          sumAbs += verticalAccSamples[i].abs();
+        }
+        final meanAbs = sumAbs / verticalAccSamples.length;
+        return _config.accMeanKConstant * pow(meanAbs, 1 / 3);
     }
   }
 
   void _flushSensorUpdates() {
-    bool any = false;
-    if (_accDirty) {
-      accSeries.value = List.unmodifiable(_accelerometerHistory);
-      _accDirty = false;
-      any = true;
-    }
-    if (_gyroDirty) {
-      gyroSeries.value = List.unmodifiable(_gyroHistory);
-      _gyroDirty = false;
-      any = true;
-    }
-    if (_magDirty) {
-      magSeries.value = List.unmodifiable(_magnetometerHistory);
-      _magDirty = false;
-      any = true;
-    }
-    if (any) notifyListeners();
+    if (_updateScheduled) return;
+
+    _updateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateScheduled = false;
+
+      bool any = false;
+      if (_accDirty) {
+        accSeries.value = _accelerometerHistory.toList(growable: false);
+        _accDirty = false;
+        any = true;
+      }
+      if (_gyroDirty) {
+        gyroSeries.value = _gyroHistory.toList(growable: false);
+        _gyroDirty = false;
+        any = true;
+      }
+      if (_magDirty) {
+        magSeries.value = _magnetometerHistory.toList(growable: false);
+        _magDirty = false;
+        any = true;
+      }
+      if (any) {
+        notifyListeners();
+      }
+    });
   }
 }

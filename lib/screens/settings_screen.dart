@@ -13,15 +13,15 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late SensorConfig draft;
   final _formKey = GlobalKey<FormState>();
-
   final Map<String, TextEditingController> _controllers = {};
+  late bool _isMale;
 
   @override
   void initState() {
     super.initState();
     final current = context.read<SensorService>().currentConfig;
     draft = current;
-
+    _isMale = draft.isMale;
     _initControllers();
   }
 
@@ -30,37 +30,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextEditingController(text: draft.pollingIntervalMs.toString());
     _controllers['userInterfaceUpdateIntervalMs'] = TextEditingController(
         text: draft.userInterfaceUpdateIntervalMs.toString());
+    _controllers['detectedLabelDuration'] =
+        TextEditingController(text: draft.detectedLabelDuration.toString());
     _controllers['warmUpDurationMs'] =
         TextEditingController(text: draft.warmUpDurationMs.toString());
-
+    _controllers['minStepGapMs'] =
+        TextEditingController(text: draft.minStepGapMs.toString());
+    _controllers['startVectorSize'] =
+        TextEditingController(text: draft.startVectorSize.toString());
+    _controllers['peakVectorSize'] =
+        TextEditingController(text: draft.peakVectorSize.toString());
+    _controllers['endVectorSize'] =
+        TextEditingController(text: draft.endVectorSize.toString());
+    _controllers['peakDiffK'] =
+        TextEditingController(text: draft.weinbergKPowFactor.toString());
+    _controllers['meanAbsK'] =
+        TextEditingController(text: draft.accMeanKConstant.toString());
+    _controllers['maxWindowSize'] =
+        TextEditingController(text: draft.maxWindowSize.toString());
     _controllers['filterOrder'] =
         TextEditingController(text: draft.filterOrder.toString());
     _controllers['filterCutoffFreq'] =
         TextEditingController(text: draft.filterCutoffFreq.toString());
-
     _controllers['accThreshold'] =
         TextEditingController(text: draft.accThreshold.toString());
     _controllers['gyroThreshold'] =
         TextEditingController(text: draft.gyroThreshold.toString());
-
     _controllers['accScale'] =
-        TextEditingController(text: draft.accelerometerScale.toString());
+        TextEditingController(text: draft.accScale.toString());
     _controllers['gyroScale'] =
         TextEditingController(text: draft.gyroScale.toString());
     _controllers['magScale'] =
         TextEditingController(text: draft.magScale.toString());
-
-    _controllers['shortStep'] =
-        TextEditingController(text: draft.shortStep.toString());
-    _controllers['mediumStep'] =
-        TextEditingController(text: draft.mediumStep.toString());
-    _controllers['longStep'] =
-        TextEditingController(text: draft.longStep.toString());
-
-    _controllers['bigStepThreshold'] =
-        TextEditingController(text: draft.bigStepThreshold.toString());
-    _controllers['mediumStepThreshold'] =
-        TextEditingController(text: draft.mediumStepThreshold.toString());
+    _controllers['heightMeters'] =
+        TextEditingController(text: draft.heightMeters.toStringAsFixed(2));
   }
 
   @override
@@ -80,10 +83,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const _SectionHeader('Sampling'),
+            const _SectionHeader('Sampling & UI'),
             _intField('Polling interval (ms)', 'pollingIntervalMs'),
             _intField(
                 'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
+            _intField('Detected label flash (ms)', 'detectedLabelDuration'),
+            SwitchListTile(
+              title: const Text('Use system default interval'),
+              value: draft.useSystemDefaultInterval,
+              onChanged: (val) => setState(
+                  () => draft = draft.copyWith(useSystemDefaultInterval: val)),
+            ),
+            const _SectionHeader('Warm-up'),
             SwitchListTile(
               title: const Text('Wait for sensors to warm up'),
               value: draft.warmUpSensors,
@@ -91,33 +102,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   setState(() => draft = draft.copyWith(warmUpSensors: val)),
             ),
             _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
-            SwitchListTile(
-              title: const Text('Use system default interval'),
-              value: draft.useSystemDefaultInterval,
-              onChanged: (val) => setState(
-                  () => draft = draft.copyWith(useSystemDefaultInterval: val)),
+            const _SectionHeader('Step Detection'),
+            _intField('Min Step Gap (ms)', 'minStepGapMs'),
+            _tripleRow([
+              _intFieldMini('Start vector', 'startVectorSize'),
+              _intFieldMini('Peak vector', 'peakVectorSize'),
+              _intFieldMini('End vector', 'endVectorSize'),
+            ]),
+            const _SectionHeader('Step-length Model'),
+            DropdownButtonFormField<StepModel>(
+              decoration: const InputDecoration(labelText: 'Model'),
+              value: draft.stepModel,
+              items: const [
+                DropdownMenuItem(
+                    value: StepModel.staticHeightAndGender,
+                    child: Text('Static (height)')),
+                DropdownMenuItem(
+                    value: StepModel.weinbergMethod,
+                    child: Text('Peak Δa (eq 3)')),
+                DropdownMenuItem(
+                    value: StepModel.meanAbs, child: Text('Mean |a| (eq 4)')),
+              ],
+              onChanged: (m) =>
+                  setState(() => draft = draft.copyWith(stepModel: m)),
             ),
+            if (draft.stepModel == StepModel.weinbergMethod)
+              _doubleField('k2 (peak-diff scale)', 'peakDiffK',
+                  requiresPositive: true),
+            if (draft.stepModel == StepModel.meanAbs)
+              _doubleField('k3 (mean-abs scale)', 'meanAbsK',
+                  requiresPositive: true),
             const _SectionHeader('Filters'),
+            Row(
+              children: [
+                Expanded(
+                    child: _intField(
+                        'Running-mean window (samples)', 'maxWindowSize')),
+                IconButton(
+                  icon: const Icon(Icons.help_outline),
+                  onPressed: () => _showInfoBox(
+                      context,
+                      'Lowpass Filter Settings',
+                      'Filter Order: Typically 2-4 for basic smoothing.\nCutoff Frequency: 2-4 Hz works well for normal walking.\nA lower cutoff removes more noise but can delay detection. Higher order filters are sharper but heavier.'),
+                ),
+              ],
+            ),
             _intField('Butterworth order', 'filterOrder'),
-            _doubleField('Cut‑off freq', 'filterCutoffFreq'),
+            _doubleField('Cut-off frequency (Hz)', 'filterCutoffFreq'),
             const _SectionHeader('Thresholds'),
-            _doubleField('Acc net magnitude threshold', 'accThreshold'),
-            _doubleField('Gyro net magnitude threshold', 'gyroThreshold'),
-            const _SectionHeader('Scaling factors'),
+            _doubleField('Accelerometer threshold', 'accThreshold'),
+            _doubleField('Gyroscope threshold', 'gyroThreshold'),
+            const _SectionHeader('Scaling Factors'),
             _tripleRow([
               _doubleFieldMini('Acc', 'accScale', requiresPositive: true),
               _doubleFieldMini('Gyro', 'gyroScale', requiresPositive: true),
               _doubleFieldMini('Mag', 'magScale', requiresPositive: true),
             ]),
-            const _SectionHeader('Step lengths (m)'),
-            _tripleRow([
-              _doubleFieldMini('Short', 'shortStep'),
-              _doubleFieldMini('Medium', 'mediumStep'),
-              _doubleFieldMini('Long', 'longStep'),
-            ]),
-            const _SectionHeader('Step thresholds'),
-            _doubleField('Big‑step threshold', 'bigStepThreshold'),
-            _doubleField('Medium‑step threshold', 'mediumStepThreshold'),
+            const _SectionHeader('User Details'),
+            _doubleField('Height (m)', 'heightMeters', requiresPositive: true),
+            DropdownButtonFormField<bool>(
+              decoration: const InputDecoration(labelText: 'Gender'),
+              value: _isMale,
+              items: const [
+                DropdownMenuItem(value: true, child: Text('Male')),
+                DropdownMenuItem(value: false, child: Text('Female')),
+              ],
+              onChanged: (val) => setState(() => _isMale = val ?? true),
+            ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               icon: const Icon(Icons.save),
@@ -131,17 +182,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showInfoBox(BuildContext context, String title, String text) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: Text(text),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('OK'))
+        ],
+      ),
+    );
+  }
+
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() {
       draft = draft.copyWith(
         pollingIntervalMs:
             int.parse(_controllers['pollingIntervalMs']!.text.trim()),
         userInterfaceUpdateIntervalMs: int.parse(
             _controllers['userInterfaceUpdateIntervalMs']!.text.trim()),
+        detectedLabelDuration:
+            int.parse(_controllers['detectedLabelDuration']!.text.trim()),
         warmUpDurationMs:
             int.parse(_controllers['warmUpDurationMs']!.text.trim()),
+        minStepGapMs: int.parse(_controllers['minStepGapMs']!.text.trim()),
+        startVectorSize:
+            int.parse(_controllers['startVectorSize']!.text.trim()),
+        peakVectorSize: int.parse(_controllers['peakVectorSize']!.text.trim()),
+        endVectorSize: int.parse(_controllers['endVectorSize']!.text.trim()),
+        weinbergKPowFactor:
+            double.parse(_controllers['peakDiffK']!.text.trim()),
+        accMeanKConstant: double.parse(_controllers['meanAbsK']!.text.trim()),
+        maxWindowSize: int.parse(_controllers['maxWindowSize']!.text.trim()),
         filterOrder: int.parse(_controllers['filterOrder']!.text.trim()),
         filterCutoffFreq:
             double.parse(_controllers['filterCutoffFreq']!.text.trim()),
@@ -150,28 +225,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         accScale: double.parse(_controllers['accScale']!.text.trim()),
         gyroScale: double.parse(_controllers['gyroScale']!.text.trim()),
         magScale: double.parse(_controllers['magScale']!.text.trim()),
-        shortStep: double.parse(_controllers['shortStep']!.text.trim()),
-        mediumStep: double.parse(_controllers['mediumStep']!.text.trim()),
-        longStep: double.parse(_controllers['longStep']!.text.trim()),
-        bigStepThreshold:
-            double.parse(_controllers['bigStepThreshold']!.text.trim()),
-        mediumStepThreshold:
-            double.parse(_controllers['mediumStepThreshold']!.text.trim()),
+        heightMeters: double.parse(_controllers['heightMeters']!.text.trim()),
+        isMale: _isMale,
+        stepModel: draft.stepModel,
       );
     });
 
     final didWarmup = context.read<SensorService>().updateConfig(draft);
 
     if (!didWarmup && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Settings applied instantly'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showToast(context, 'Settings applied instantly');
     }
 
     Navigator.of(context).pop();
+  }
+
+  void _showToast(BuildContext context, String message) {
+    final overlay = Overlay.of(context);
+    final overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 100,
+        left: MediaQuery.of(context).size.width * 0.25,
+        width: MediaQuery.of(context).size.width * 0.5,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Center(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+    Future.delayed(const Duration(seconds: 2))
+        .then((_) => overlayEntry.remove());
   }
 
   Widget _intField(String label, String key) => TextFormField(
@@ -181,6 +279,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         validator: (v) =>
             int.tryParse(v ?? '') == null ? 'Enter an integer' : null,
       );
+
+  Widget _intFieldMini(String label, String key) =>
+      Expanded(child: _intField(label, key));
 
   Widget _doubleField(String label, String key,
           {bool requiresPositive = false}) =>

@@ -1,14 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import '../utils/raw_accelerometer_sample.dart'; // Import this!
 import '../widgets/graph_painter.dart';
+import '../widgets/raw_acc_graph_painter.dart';
 import '../services/sensor_service.dart';
 import 'sensor_screen.dart';
 
 class GraphDetailScreen extends StatelessWidget {
   final String title;
-  final ValueListenable<List<double>> notifier;
+  final ValueListenable notifier;
   final Color color;
 
   const GraphDetailScreen({
@@ -71,20 +72,115 @@ class GraphDetailScreen extends StatelessWidget {
               ] else ...[
                 const Text('No data')
               ],
-              const SizedBox(height: 50),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildStatusLight(
+                      'Peak Detected', svc.peakDetectedNotifier, Colors.green),
+                  const SizedBox(width: 16),
+                  _buildStatusLightWithFakePeak('End Detected',
+                      svc.endDetectedNotifier, svc.fakePeakDetectedNotifier),
+                ],
+              ),
+              const SizedBox(height: 24),
               SizedBox(
                 height: 400,
-                child: ValueListenableBuilder<List<double>>(
+                child: ValueListenableBuilder(
                   valueListenable: notifier,
-                  builder: (_, points, __) => CustomPaint(
-                    painter: GraphPainter(points, color),
-                    child: Container(),
-                  ),
+                  builder: (_, value, __) {
+                    if (value is List<double>) {
+                      return CustomPaint(
+                        painter: GraphPainter(value, color),
+                        child: Container(),
+                      );
+                    } else if (value is List<RawAccelerometerSample>) {
+                      return CustomPaint(
+                        painter: RawAccGraphPainter(value, color),
+                        child: Container(),
+                      );
+                    } else {
+                      return const Center(
+                          child: Text('Unsupported graph type'));
+                    }
+                  },
                 ),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStatusLight(
+      String label, ValueListenable<bool> notifier, Color activeColor) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: notifier,
+      builder: (_, active, __) => Row(
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: active ? activeColor : Colors.grey,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusLightWithFakePeak(String label,
+      ValueListenable<bool> endNotifier, ValueListenable<bool> fakeNotifier) {
+    return ValueListenableBuilder2<bool, bool>(
+      first: endNotifier,
+      second: fakeNotifier,
+      builder: (_, endActive, fakeActive, __) => Row(
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: fakeActive
+                  ? Colors.red
+                  : endActive
+                      ? Colors.green
+                      : Colors.grey,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 14)),
+        ],
+      ),
+    );
+  }
+}
+
+class ValueListenableBuilder2<A, B> extends StatelessWidget {
+  final ValueListenable<A> first;
+  final ValueListenable<B> second;
+  final Widget Function(BuildContext, A, B, Widget?) builder;
+
+  const ValueListenableBuilder2({
+    super.key,
+    required this.first,
+    required this.second,
+    required this.builder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<A>(
+      valueListenable: first,
+      builder: (context, firstValue, _) => ValueListenableBuilder<B>(
+        valueListenable: second,
+        builder: (context, secondValue, __) =>
+            builder(context, firstValue, secondValue, null),
       ),
     );
   }

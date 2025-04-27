@@ -2,18 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'config/sensor_config.dart';
+import 'config/graph_visibility_config.dart';
 import 'services/sensor_service.dart';
 import 'screens/sensor_screen.dart';
 
 void main() {
-  const SensorConfig defaultConfig = SensorConfig();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => SensorService(defaultConfig),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+            create: (_) => SensorService(defaultSensorConfig)),
+        ChangeNotifierProvider(create: (_) => defaultGraphVisibilityConfig),
+      ],
       child: const MyApp(),
     ),
   );
 }
+
+const SensorConfig defaultSensorConfig = SensorConfig();
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

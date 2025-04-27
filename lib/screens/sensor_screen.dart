@@ -1,20 +1,28 @@
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-
+import 'package:study_step_detection/config/graph_visibility_config.dart';
+import 'package:study_step_detection/screens/raw_graph_detail_screen.dart';
+import 'package:study_step_detection/utils/raw_accelerometer_sample.dart';
 import '../services/sensor_service.dart';
-import 'settings_screen.dart';
 import '../widgets/graph_painter.dart';
+import '../widgets/raw_acc_graph_painter.dart';
 import 'graph_detail_screen.dart';
+import 'settings_screen.dart';
 
-class SensorScreen extends StatelessWidget {
+class SensorScreen extends StatefulWidget {
   const SensorScreen({super.key});
 
   @override
+  State<SensorScreen> createState() => _SensorScreenState();
+}
+
+class _SensorScreenState extends State<SensorScreen> {
+  @override
   Widget build(BuildContext context) {
+    final visibility = context.watch<GraphVisibilityConfig>();
     return Scaffold(
       appBar: AppBar(
         title: const Text('Step Counter',
@@ -52,11 +60,40 @@ class SensorScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _bigNumber('Distance (m)', svc.distance.toStringAsFixed(2)),
               const SizedBox(height: 24),
-              _buildSensorSection(context, svc, 'Accelerometer', Colors.blue),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _graphToggleColumn(
+                        'Filtered Accel',
+                        visibility.showAccelerometer,
+                        (v) =>
+                            setState(() => visibility.showAccelerometer = v)),
+                    _graphToggleColumn(
+                        'Raw Accel',
+                        visibility.showRawAccelerometer,
+                        (v) => setState(
+                            () => visibility.showRawAccelerometer = v)),
+                    _graphToggleColumn('Gyroscope', visibility.showGyroscope,
+                        (v) => setState(() => visibility.showGyroscope = v)),
+                    _graphToggleColumn(
+                        'Magnetometer',
+                        visibility.showMagnetometer,
+                        (v) => setState(() => visibility.showMagnetometer = v)),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
-              _buildSensorSection(context, svc, 'Gyroscope', Colors.green),
-              const SizedBox(height: 16),
-              _buildSensorSection(context, svc, 'Magnetometer', Colors.red),
+              if (visibility.showAccelerometer)
+                _buildSensorSection(context, svc, 'Accelerometer', Colors.blue),
+              if (visibility.showRawAccelerometer)
+                _buildRawAccSection(
+                    context, svc, 'Raw Accelerometer', Colors.blue),
+              if (visibility.showGyroscope)
+                _buildSensorSection(context, svc, 'Gyroscope', Colors.green),
+              if (visibility.showMagnetometer)
+                _buildSensorSection(context, svc, 'Magnetometer', Colors.red),
               const SizedBox(height: 24),
               OutlinedButton.icon(
                 icon: const Icon(Icons.save_alt),
@@ -106,6 +143,26 @@ class SensorScreen extends StatelessWidget {
           Text(label, style: const TextStyle(fontSize: 16)),
         ],
       );
+  Widget _graphToggleColumn(
+      String label, bool value, Function(bool) onChanged) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
+        Checkbox(
+          value: value,
+          onChanged: (v) => onChanged(v ?? false),
+          visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          splashRadius: 16,
+        ),
+      ],
+    );
+  }
 
   Widget _buildSensorSection(
       BuildContext context, SensorService svc, String type, Color color) {
@@ -133,10 +190,53 @@ class SensorScreen extends StatelessWidget {
           magnitude: data['magnitude'] as double,
           average: data['average'] as double,
           net: data['net'] as double,
+          extra: data['extra'] as String?,
         ),
       ),
     );
   }
+}
+
+Widget _buildRawAccSection(
+    BuildContext context, SensorService svc, String title, Color color) {
+  return GestureDetector(
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RawGraphDetailScreen(
+            title: title,
+            samplesNotifier: svc.rawAccSeries,
+            color: color,
+          ),
+        ),
+      );
+    },
+    child: Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              width: double.infinity,
+              child: ValueListenableBuilder<List<RawAccelerometerSample>>(
+                valueListenable: svc.rawAccSeries,
+                builder: (_, samples, __) {
+                  return CustomPaint(
+                    painter: RawAccGraphPainter(samples, color),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 Map<String, dynamic> getSensorData(SensorService svc, String type) {
@@ -148,6 +248,7 @@ Map<String, dynamic> getSensorData(SensorService svc, String type) {
         'magnitude': svc.accMagnitude,
         'average': svc.accAvgMagnitude,
         'net': svc.accNetMagnitude,
+        'extra': 'Filtered: ${svc.filteredAcc.toStringAsFixed(4)}',
       };
     case 'Gyroscope':
       return {
@@ -156,6 +257,7 @@ Map<String, dynamic> getSensorData(SensorService svc, String type) {
         'magnitude': svc.gyroMagnitude,
         'average': svc.gyroAvgMagnitude,
         'net': svc.gyroNetMagnitude,
+        'extra': 'Abs(Net): ${svc.gyroAbsNet.toStringAsFixed(4)}',
       };
     case 'Magnetometer':
       return {
@@ -164,6 +266,7 @@ Map<String, dynamic> getSensorData(SensorService svc, String type) {
         'magnitude': svc.magMagnitude,
         'average': svc.magAvgMagnitude,
         'net': svc.magNetMagnitude,
+        'extra': 'Avg Only: ${svc.magAvgMagnitude.toStringAsFixed(4)}',
       };
     default:
       return {};
@@ -176,6 +279,7 @@ Widget _sensorDetail({
   required double magnitude,
   required double average,
   required double net,
+  String? extra,
 }) {
   if (latest == null) return const Center(child: Text('No data'));
 
@@ -192,6 +296,7 @@ Widget _sensorDetail({
         Text('Magnitude: ${magnitude.toStringAsFixed(4)}'),
         Text('Average: ${average.toStringAsFixed(4)}'),
         Text('Net: ${net.toStringAsFixed(4)}'),
+        if (extra != null) Text(extra),
       ],
     ),
   );
@@ -243,18 +348,28 @@ Future<bool> _saveAllGraphsToCsv(Map<String, List<double>> dataMap) async {
   try {
     final dir = await getApplicationDocumentsDirectory();
 
+    final List<Future<void>> saveTasks = [];
+
     for (final entry in dataMap.entries) {
-      final file = File('${dir.path}/${entry.key.toLowerCase()}.csv');
-      final csv = StringBuffer('Index,Value\n');
+      final filename = '${entry.key.toLowerCase()}.csv';
+      final file = File('${dir.path}/$filename');
+
+      final csvBuffer = StringBuffer('Index,Value\n');
       for (int i = 0; i < entry.value.length; i++) {
-        csv.writeln('$i,${entry.value[i].toStringAsFixed(6)}');
+        csvBuffer.writeln('$i,${entry.value[i].toStringAsFixed(6)}');
       }
-      await file.writeAsString(csv.toString());
+
+      saveTasks.add(
+        file
+            .create(recursive: true)
+            .then((f) => f.writeAsString(csvBuffer.toString())),
+      );
     }
 
+    await Future.wait(saveTasks);
     return true;
-  } catch (e) {
-    debugPrint('CSV export failed: $e');
+  } catch (e, stack) {
+    debugPrint('CSV export failed: $e\n$stack');
     return false;
   }
 }
