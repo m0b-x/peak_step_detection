@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'dart:math' show max;
 
 class GraphPainter extends CustomPainter {
-  GraphPainter(this.points, this.color);
+  GraphPainter(this.points, this.color, {this.threshold});
 
   final List<double> points;
   final Color color;
+  final double? threshold;
 
   /* simple cache: yScale*100 → list of 6 label painters */
   static final _cache = <int, List<TextPainter>>{};
@@ -29,6 +30,20 @@ class GraphPainter extends CustomPainter {
     final dx = graphW / (points.length - 1);
     final maxVal = points.fold<double>(0, (m, e) => max(m, e.abs()));
     final yScale = maxVal == 0 ? 1 : maxVal;
+
+    if (threshold != null && threshold!.abs() <= yScale) {
+      final thresholdY = size.height * (0.5 - threshold! / yScale / 2);
+      final thresholdPaint = Paint()
+        ..color = Colors.black87
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke;
+
+      canvas.drawLine(
+        Offset(leftPad, thresholdY),
+        Offset(size.width, thresholdY),
+        thresholdPaint,
+      );
+    }
 
     /* ───── grid & labels ───── */
     const gridLines = 5;
@@ -85,5 +100,5 @@ class GraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(GraphPainter old) =>
-      old.points != points || old.color != color;
+      old.points != points || old.color != color || old.threshold != threshold;
 }

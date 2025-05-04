@@ -117,12 +117,26 @@ class _SensorScreenState extends State<SensorScreen> {
               ),
               const SizedBox(height: 16),
               if (visibility.showAccelerometer)
-                _buildSensorSection(context, svc, 'Accelerometer', Colors.blue),
+                _buildSensorSection(
+                  context,
+                  svc,
+                  'Accelerometer',
+                  Colors.blue,
+                  threshold: svc.currentConfig.accThreshold /
+                      svc.currentConfig.accScale,
+                ),
               if (visibility.showRawAccelerometer)
                 _buildRawAccSection(
                     context, svc, 'Raw Accelerometer', Colors.blue),
               if (visibility.showGyroscope)
-                _buildSensorSection(context, svc, 'Gyroscope', Colors.green),
+                _buildSensorSection(
+                  context,
+                  svc,
+                  'Gyroscope',
+                  Colors.green,
+                  threshold: svc.currentConfig.gyroThreshold /
+                      svc.currentConfig.gyroScale,
+                ),
               if (visibility.showMagnetometer)
                 _buildSensorSection(context, svc, 'Magnetometer', Colors.red),
               const SizedBox(height: 24),
@@ -306,7 +320,12 @@ class _SensorScreenState extends State<SensorScreen> {
   }
 
   Widget _buildSensorSection(
-      BuildContext context, SensorService svc, String type, Color color) {
+    BuildContext context,
+    SensorService svc,
+    String type,
+    Color color, {
+    double? threshold,
+  }) {
     final data = getSensorData(svc, type);
     return GestureDetector(
       onTap: () {
@@ -325,6 +344,7 @@ class _SensorScreenState extends State<SensorScreen> {
         title: type,
         notifier: data['series'] as ValueListenable<List<double>>,
         color: color,
+        threshold: threshold,
         detailBuilder: () => _sensorDetail(
           title: type,
           latest: data['latest'],
@@ -472,11 +492,13 @@ class _SensorCard extends StatelessWidget {
     required this.notifier,
     required this.color,
     required this.detailBuilder,
+    this.threshold,
   });
 
   final String title;
   final ValueListenable<List<double>> notifier;
   final Color color;
+  final double? threshold;
   final Widget Function() detailBuilder;
 
   @override
@@ -495,7 +517,7 @@ class _SensorCard extends StatelessWidget {
               child: ValueListenableBuilder<List<double>>(
                 valueListenable: notifier,
                 builder: (_, data, __) => CustomPaint(
-                  painter: GraphPainter(data, color),
+                  painter: GraphPainter(data, color, threshold: threshold),
                 ),
               ),
             ),
