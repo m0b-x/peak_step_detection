@@ -27,14 +27,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _initControllers();
 
     const titles = [
-      'Sampling & UI',
-      'Warm-up',
+      'User Interface',
+      'Sampling',
+      'Filtering',
       'Step Detection',
-      'Step-length Model',
-      'Filters',
-      'Thresholds',
-      'Scaling Factors',
-      'User Details',
+      'Step Length Estimation',
     ];
     _expandedSections.addEntries(titles.map((t) => MapEntry(t, false)));
   }
@@ -98,11 +95,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            _card('Sampling & UI', [
-              _intField('Polling interval (ms)', 'pollingIntervalMs'),
+            _card('User Interface', [
+              Text('UI Refresh Rate',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               _intField(
                   'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
+              const Divider(height: 24),
+              Text('Flashing Time',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               _intField('Detected label flash (ms)', 'detectedLabelDuration'),
+              const Divider(height: 24),
+              Text('Scaling Factors',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              SettingsFieldUtils.tripleRow([
+                _doubleField('Acc', 'accScale', positive: true),
+                _doubleField('Gyro', 'gyroScale', positive: true),
+                _doubleField('Mag', 'magScale', positive: true),
+              ]),
+            ]),
+            _card('Sampling', [
+              Text('Sensor Sampling Rate',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              _intField('Polling interval (ms)', 'pollingIntervalMs'),
               SwitchListTile(
                 title: const Text('Use system default interval'),
                 value: draft.useSystemDefaultInterval,
@@ -110,7 +140,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     () => draft = draft.copyWith(useSystemDefaultInterval: v)),
               ),
             ]),
-            _card('Warm-up', [
+            _card('Filtering', [
+              Text('Warm-up',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Wait for sensors to warm up'),
                 value: draft.warmUpSensors,
@@ -118,16 +154,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => draft = draft.copyWith(warmUpSensors: v)),
               ),
               _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
+              const Divider(height: 24),
+              Text('Window Size',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              _intField('Running-mean window (samples)', 'maxWindowSize'),
+              const Divider(height: 24),
+              Text('Low Pass Filter',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Use low-pass Butterworth filter'),
+                value: draft.useLowPassFilter,
+                onChanged: (v) =>
+                    setState(() => draft = draft.copyWith(useLowPassFilter: v)),
+              ),
+              SettingsFieldUtils.tripleRow([
+                _intField('LP Order', 'lowPassFilterOrder'),
+                _doubleField('LP Cutoff (Hz)', 'lowPassFilterCutoffFreq',
+                    positive: true),
+                const SizedBox(),
+              ]),
+              Text('HIgh Pass FIlter',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              SwitchListTile(
+                title: const Text('Use high-pass Butterworth filter'),
+                value: draft.useHighPassFilter,
+                onChanged: (v) => setState(
+                    () => draft = draft.copyWith(useHighPassFilter: v)),
+              ),
+              SettingsFieldUtils.tripleRow([
+                _intField('HP Order', 'highPassFilterOrder'),
+                _doubleField('HP Cutoff (Hz)', 'highPassFilterCutoffFreq',
+                    positive: true),
+                const SizedBox(),
+              ]),
             ]),
             _card('Step Detection', [
-              _intField('Min Step Gap (ms)', 'minStepGapMs'),
+              Text('Detection Threshold',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              _doubleField('Accelerometer threshold', 'accThreshold'),
+              const SizedBox(height: 24),
+              Text('Vector Size',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               SettingsFieldUtils.tripleRow([
                 _intField('Start vector', 'startVectorSize'),
                 _intField('Peak vector', 'peakVectorSize'),
                 _intField('End vector', 'endVectorSize'),
               ]),
+              const SizedBox(height: 24),
+              Text('Fake Step Detection',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              _doubleField('Gyroscope threshold', 'gyroThreshold'),
+              _intField('Min Step Gap (ms)', 'minStepGapMs'),
             ]),
-            _card('Step-length Model', [
+            _card('Step Length Estimation', [
+              Text('Step Length Model',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               DropdownButtonFormField<StepModel>(
                 decoration: const InputDecoration(labelText: 'Model'),
                 value: draft.stepModel,
@@ -153,46 +261,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     positive: true),
               if (draft.stepModel == StepModel.meanAbs)
                 _doubleField('k3 (mean-abs scale)', 'meanAbsK', positive: true),
-            ]),
-            _card('Filters', [
-              _intField('Running-mean window (samples)', 'maxWindowSize'),
-              SwitchListTile(
-                title: const Text('Use low-pass Butterworth filter'),
-                value: draft.useLowPassFilter,
-                onChanged: (v) =>
-                    setState(() => draft = draft.copyWith(useLowPassFilter: v)),
-              ),
-              SettingsFieldUtils.tripleRow([
-                _intField('LP Order', 'lowPassFilterOrder'),
-                _doubleField('LP Cutoff (Hz)', 'lowPassFilterCutoffFreq',
-                    positive: true),
-                const SizedBox(),
-              ]),
-              SwitchListTile(
-                title: const Text('Use high-pass Butterworth filter'),
-                value: draft.useHighPassFilter,
-                onChanged: (v) => setState(
-                    () => draft = draft.copyWith(useHighPassFilter: v)),
-              ),
-              SettingsFieldUtils.tripleRow([
-                _intField('HP Order', 'highPassFilterOrder'),
-                _doubleField('HP Cutoff (Hz)', 'highPassFilterCutoffFreq',
-                    positive: true),
-                const SizedBox(),
-              ]),
-            ]),
-            _card('Thresholds', [
-              _doubleField('Accelerometer threshold', 'accThreshold'),
-              _doubleField('Gyroscope threshold', 'gyroThreshold'),
-            ]),
-            _card('Scaling Factors', [
-              SettingsFieldUtils.tripleRow([
-                _doubleField('Acc', 'accScale', positive: true),
-                _doubleField('Gyro', 'gyroScale', positive: true),
-                _doubleField('Mag', 'magScale', positive: true),
-              ]),
-            ]),
-            _card('User Details', [
+              const SizedBox(height: 32),
+              Text('User Details',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               _doubleField('Height (m)', 'heightMeters', positive: true),
               DropdownButtonFormField<bool>(
                 decoration: const InputDecoration(labelText: 'Gender'),

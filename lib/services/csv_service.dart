@@ -51,7 +51,7 @@ class CsvService {
       return false;
     }
 
-    _csvBuffer.writeln('timestamp,x,y,z,filteredMag');
+    _csvBuffer.writeln('timestamp,raw_acc_x,raw_acc_y,raw_acc_z,filteredMag');
     _hasPendingCsvData = true;
     _lastCsvPath = file.path;
     _csvFlushTimer = Timer.periodic(
