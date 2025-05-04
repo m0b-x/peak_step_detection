@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:study_step_detection/services/csv_service.dart';
 
 import 'config/sensor_config.dart';
 import 'config/graph_visibility_config.dart';
@@ -10,8 +11,13 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
+        Provider(create: (_) => CsvService()),
         ChangeNotifierProvider(
-            create: (_) => SensorService(defaultSensorConfig)),
+          create: (context) => SensorService(
+            defaultSensorConfig,
+            context.read<CsvService>(),
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => defaultGraphVisibilityConfig),
       ],
       child: const MyApp(),

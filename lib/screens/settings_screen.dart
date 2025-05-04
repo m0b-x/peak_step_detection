@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../services/sensor_service.dart';
 import '../config/sensor_config.dart';
+import '../utils/settings_screen_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,189 +17,238 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _controllers = {};
   late bool _isMale;
+  final Map<String, bool> _expandedSections = {};
 
   @override
   void initState() {
     super.initState();
-    final current = context.read<SensorService>().currentConfig;
-    draft = current;
+    draft = context.read<SensorService>().currentConfig;
     _isMale = draft.isMale;
     _initControllers();
-  }
 
-  void _initControllers() {
-    _controllers['pollingIntervalMs'] =
-        TextEditingController(text: draft.pollingIntervalMs.toString());
-    _controllers['userInterfaceUpdateIntervalMs'] = TextEditingController(
-        text: draft.userInterfaceUpdateIntervalMs.toString());
-    _controllers['detectedLabelDuration'] =
-        TextEditingController(text: draft.detectedLabelDuration.toString());
-    _controllers['warmUpDurationMs'] =
-        TextEditingController(text: draft.warmUpDurationMs.toString());
-    _controllers['minStepGapMs'] =
-        TextEditingController(text: draft.minStepGapMs.toString());
-    _controllers['startVectorSize'] =
-        TextEditingController(text: draft.startVectorSize.toString());
-    _controllers['peakVectorSize'] =
-        TextEditingController(text: draft.peakVectorSize.toString());
-    _controllers['endVectorSize'] =
-        TextEditingController(text: draft.endVectorSize.toString());
-    _controllers['peakDiffK'] =
-        TextEditingController(text: draft.weinbergKPowFactor.toString());
-    _controllers['meanAbsK'] =
-        TextEditingController(text: draft.accMeanKConstant.toString());
-    _controllers['maxWindowSize'] =
-        TextEditingController(text: draft.maxWindowSize.toString());
-    _controllers['filterOrder'] =
-        TextEditingController(text: draft.filterOrder.toString());
-    _controllers['filterCutoffFreq'] =
-        TextEditingController(text: draft.filterCutoffFreq.toString());
-    _controllers['accThreshold'] =
-        TextEditingController(text: draft.accThreshold.toString());
-    _controllers['gyroThreshold'] =
-        TextEditingController(text: draft.gyroThreshold.toString());
-    _controllers['accScale'] =
-        TextEditingController(text: draft.accScale.toString());
-    _controllers['gyroScale'] =
-        TextEditingController(text: draft.gyroScale.toString());
-    _controllers['magScale'] =
-        TextEditingController(text: draft.magScale.toString());
-    _controllers['heightMeters'] =
-        TextEditingController(text: draft.heightMeters.toStringAsFixed(2));
+    const titles = [
+      'Sampling & UI',
+      'Warm-up',
+      'Step Detection',
+      'Step-length Model',
+      'Filters',
+      'Thresholds',
+      'Scaling Factors',
+      'User Details',
+    ];
+    _expandedSections.addEntries(titles.map((t) => MapEntry(t, false)));
   }
 
   @override
   void dispose() {
-    for (final controller in _controllers.values) {
-      controller.dispose();
+    for (final c in _controllers.values) {
+      c.dispose();
     }
     super.dispose();
   }
 
+  bool _allExpanded() =>
+      _expandedSections.values.isNotEmpty &&
+      _expandedSections.values.every((e) => e);
+
+  void _toggleAll() {
+    final expand = !_allExpanded();
+    setState(() {
+      for (final k in _expandedSections.keys) {
+        _expandedSections[k] = expand;
+      }
+    });
+  }
+
+  Widget _intField(String label, String key) =>
+      SettingsFieldUtils.intField(controller: _controllers[key]!, label: label);
+
+  Widget _doubleField(String label, String key, {bool positive = false}) =>
+      SettingsFieldUtils.doubleField(
+        controller: _controllers[key]!,
+        label: label,
+        requiresPositive: positive,
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        actions: [
+          IconButton(
+            tooltip: _allExpanded() ? 'Collapse All' : 'Expand All',
+            icon: Icon(_allExpanded() ? Icons.expand_less : Icons.expand_more),
+            onPressed: _toggleAll,
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.save),
+          label: const Text('Save & Restart Sensors'),
+          onPressed: _save,
+          style:
+              ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        ),
+      ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            const _SectionHeader('Sampling & UI'),
-            _intField('Polling interval (ms)', 'pollingIntervalMs'),
-            _intField(
-                'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
-            _intField('Detected label flash (ms)', 'detectedLabelDuration'),
-            SwitchListTile(
-              title: const Text('Use system default interval'),
-              value: draft.useSystemDefaultInterval,
-              onChanged: (val) => setState(
-                  () => draft = draft.copyWith(useSystemDefaultInterval: val)),
-            ),
-            const _SectionHeader('Warm-up'),
-            SwitchListTile(
-              title: const Text('Wait for sensors to warm up'),
-              value: draft.warmUpSensors,
-              onChanged: (val) =>
-                  setState(() => draft = draft.copyWith(warmUpSensors: val)),
-            ),
-            _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
-            const _SectionHeader('Step Detection'),
-            _intField('Min Step Gap (ms)', 'minStepGapMs'),
-            _tripleRow([
-              _intFieldMini('Start vector', 'startVectorSize'),
-              _intFieldMini('Peak vector', 'peakVectorSize'),
-              _intFieldMini('End vector', 'endVectorSize'),
+            _card('Sampling & UI', [
+              _intField('Polling interval (ms)', 'pollingIntervalMs'),
+              _intField(
+                  'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
+              _intField('Detected label flash (ms)', 'detectedLabelDuration'),
+              SwitchListTile(
+                title: const Text('Use system default interval'),
+                value: draft.useSystemDefaultInterval,
+                onChanged: (v) => setState(
+                    () => draft = draft.copyWith(useSystemDefaultInterval: v)),
+              ),
             ]),
-            const _SectionHeader('Step-length Model'),
-            DropdownButtonFormField<StepModel>(
-              decoration: const InputDecoration(labelText: 'Model'),
-              value: draft.stepModel,
-              items: const [
-                DropdownMenuItem(
+            _card('Warm-up', [
+              SwitchListTile(
+                title: const Text('Wait for sensors to warm up'),
+                value: draft.warmUpSensors,
+                onChanged: (v) =>
+                    setState(() => draft = draft.copyWith(warmUpSensors: v)),
+              ),
+              _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
+            ]),
+            _card('Step Detection', [
+              _intField('Min Step Gap (ms)', 'minStepGapMs'),
+              SettingsFieldUtils.tripleRow([
+                _intField('Start vector', 'startVectorSize'),
+                _intField('Peak vector', 'peakVectorSize'),
+                _intField('End vector', 'endVectorSize'),
+              ]),
+            ]),
+            _card('Step-length Model', [
+              DropdownButtonFormField<StepModel>(
+                decoration: const InputDecoration(labelText: 'Model'),
+                value: draft.stepModel,
+                items: const [
+                  DropdownMenuItem(
                     value: StepModel.staticHeightAndGender,
-                    child: Text('Static (height)')),
-                DropdownMenuItem(
+                    child: Text('Height * k(Gender Factor)'),
+                  ),
+                  DropdownMenuItem(
                     value: StepModel.weinbergMethod,
-                    child: Text('Peak Δa (eq 3)')),
-                DropdownMenuItem(
-                    value: StepModel.meanAbs, child: Text('Mean |a| (eq 4)')),
-              ],
-              onChanged: (m) =>
-                  setState(() => draft = draft.copyWith(stepModel: m)),
-            ),
-            if (draft.stepModel == StepModel.weinbergMethod)
-              _doubleField('k2 (peak-diff scale)', 'peakDiffK',
-                  requiresPositive: true),
-            if (draft.stepModel == StepModel.meanAbs)
-              _doubleField('k3 (mean-abs scale)', 'meanAbsK',
-                  requiresPositive: true),
-            const _SectionHeader('Filters'),
-            Row(
-              children: [
-                Expanded(
-                    child: _intField(
-                        'Running-mean window (samples)', 'maxWindowSize')),
-                IconButton(
-                  icon: const Icon(Icons.help_outline),
-                  onPressed: () => _showInfoBox(
-                      context,
-                      'Lowpass Filter Settings',
-                      'Filter Order: Typically 2-4 for basic smoothing.\nCutoff Frequency: 2-4 Hz works well for normal walking.\nA lower cutoff removes more noise but can delay detection. Higher order filters are sharper but heavier.'),
-                ),
-              ],
-            ),
-            _intField('Butterworth order', 'filterOrder'),
-            _doubleField('Cut-off frequency (Hz)', 'filterCutoffFreq'),
-            const _SectionHeader('Thresholds'),
-            _doubleField('Accelerometer threshold', 'accThreshold'),
-            _doubleField('Gyroscope threshold', 'gyroThreshold'),
-            const _SectionHeader('Scaling Factors'),
-            _tripleRow([
-              _doubleFieldMini('Acc', 'accScale', requiresPositive: true),
-              _doubleFieldMini('Gyro', 'gyroScale', requiresPositive: true),
-              _doubleFieldMini('Mag', 'magScale', requiresPositive: true),
+                    child: Text('Ls = k × (amax - amin)^(1/4)'),
+                  ),
+                  DropdownMenuItem(
+                    value: StepModel.meanAbs,
+                    child: Text('Ls = k × (∑|aᵢ|/N)^(1/3)'),
+                  ),
+                ],
+                onChanged: (m) =>
+                    setState(() => draft = draft.copyWith(stepModel: m)),
+              ),
+              if (draft.stepModel == StepModel.weinbergMethod)
+                _doubleField('k2 (peak-diff scale)', 'peakDiffK',
+                    positive: true),
+              if (draft.stepModel == StepModel.meanAbs)
+                _doubleField('k3 (mean-abs scale)', 'meanAbsK', positive: true),
             ]),
-            const _SectionHeader('User Details'),
-            _doubleField('Height (m)', 'heightMeters', requiresPositive: true),
-            DropdownButtonFormField<bool>(
-              decoration: const InputDecoration(labelText: 'Gender'),
-              value: _isMale,
-              items: const [
-                DropdownMenuItem(value: true, child: Text('Male')),
-                DropdownMenuItem(value: false, child: Text('Female')),
-              ],
-              onChanged: (val) => setState(() => _isMale = val ?? true),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.save),
-              label: const Text('Save & Restart Sensors'),
-              onPressed: _save,
-            ),
-            const SizedBox(height: 36),
+            _card('Filters', [
+              _intField('Running-mean window (samples)', 'maxWindowSize'),
+              SwitchListTile(
+                title: const Text('Use low-pass Butterworth filter'),
+                value: draft.useLowPassFilter,
+                onChanged: (v) =>
+                    setState(() => draft = draft.copyWith(useLowPassFilter: v)),
+              ),
+              SettingsFieldUtils.tripleRow([
+                _intField('LP Order', 'lowPassFilterOrder'),
+                _doubleField('LP Cutoff (Hz)', 'lowPassFilterCutoffFreq',
+                    positive: true),
+                const SizedBox(),
+              ]),
+              SwitchListTile(
+                title: const Text('Use high-pass Butterworth filter'),
+                value: draft.useHighPassFilter,
+                onChanged: (v) => setState(
+                    () => draft = draft.copyWith(useHighPassFilter: v)),
+              ),
+              SettingsFieldUtils.tripleRow([
+                _intField('HP Order', 'highPassFilterOrder'),
+                _doubleField('HP Cutoff (Hz)', 'highPassFilterCutoffFreq',
+                    positive: true),
+                const SizedBox(),
+              ]),
+            ]),
+            _card('Thresholds', [
+              _doubleField('Accelerometer threshold', 'accThreshold'),
+              _doubleField('Gyroscope threshold', 'gyroThreshold'),
+            ]),
+            _card('Scaling Factors', [
+              SettingsFieldUtils.tripleRow([
+                _doubleField('Acc', 'accScale', positive: true),
+                _doubleField('Gyro', 'gyroScale', positive: true),
+                _doubleField('Mag', 'magScale', positive: true),
+              ]),
+            ]),
+            _card('User Details', [
+              _doubleField('Height (m)', 'heightMeters', positive: true),
+              DropdownButtonFormField<bool>(
+                decoration: const InputDecoration(labelText: 'Gender'),
+                value: _isMale,
+                items: const [
+                  DropdownMenuItem(value: true, child: Text('Male')),
+                  DropdownMenuItem(value: false, child: Text('Female')),
+                ],
+                onChanged: (v) => setState(() => _isMale = v ?? true),
+              ),
+            ]),
           ],
         ),
       ),
     );
   }
 
-  void _showInfoBox(BuildContext context, String title, String text) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title),
-        content: Text(text),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('OK'))
-        ],
+  Widget _card(String title, List<Widget> children) {
+    final expanded = _expandedSections[title] ?? false;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      elevation: 2,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: expanded,
+          onExpansionChanged: (v) =>
+              setState(() => _expandedSections[title] = v),
+          title: Row(
+            children: [
+              Icon(Icons.label_important,
+                  color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium!
+                      .copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: children),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
+
     setState(() {
       draft = draft.copyWith(
         pollingIntervalMs:
@@ -213,13 +264,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             int.parse(_controllers['startVectorSize']!.text.trim()),
         peakVectorSize: int.parse(_controllers['peakVectorSize']!.text.trim()),
         endVectorSize: int.parse(_controllers['endVectorSize']!.text.trim()),
-        weinbergKPowFactor:
-            double.parse(_controllers['peakDiffK']!.text.trim()),
         accMeanKConstant: double.parse(_controllers['meanAbsK']!.text.trim()),
         maxWindowSize: int.parse(_controllers['maxWindowSize']!.text.trim()),
-        filterOrder: int.parse(_controllers['filterOrder']!.text.trim()),
-        filterCutoffFreq:
-            double.parse(_controllers['filterCutoffFreq']!.text.trim()),
+        useLowPassFilter: draft.useLowPassFilter,
+        lowPassFilterOrder:
+            int.parse(_controllers['lowPassFilterOrder']!.text.trim()),
+        lowPassFilterCutoffFreq:
+            double.parse(_controllers['lowPassFilterCutoffFreq']!.text.trim()),
+        useHighPassFilter: draft.useHighPassFilter,
+        highPassFilterOrder:
+            int.parse(_controllers['highPassFilterOrder']!.text.trim()),
+        highPassFilterCutoffFreq:
+            double.parse(_controllers['highPassFilterCutoffFreq']!.text.trim()),
         accThreshold: double.parse(_controllers['accThreshold']!.text.trim()),
         gyroThreshold: double.parse(_controllers['gyroThreshold']!.text.trim()),
         accScale: double.parse(_controllers['accScale']!.text.trim()),
@@ -231,104 +287,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     });
 
-    final didWarmup = context.read<SensorService>().updateConfig(draft);
-
-    if (!didWarmup && context.mounted) {
-      _showToast(context, 'Settings applied instantly');
+    final needsWarmup = context.read<SensorService>().updateConfig(draft);
+    if (!needsWarmup && context.mounted) {
+      SettingsFieldUtils.showToast(context, 'Settings applied instantly');
     }
 
     Navigator.of(context).pop();
   }
 
-  void _showToast(BuildContext context, String message) {
-    final overlay = Overlay.of(context);
-    final overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        bottom: 100,
-        left: MediaQuery.of(context).size.width * 0.25,
-        width: MediaQuery.of(context).size.width * 0.5,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.black87,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Center(
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  void _initControllers() {
+    void add(String k, dynamic v) =>
+        _controllers[k] = TextEditingController(text: v.toString());
 
-    overlay.insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 2))
-        .then((_) => overlayEntry.remove());
+    add('pollingIntervalMs', draft.pollingIntervalMs);
+    add('userInterfaceUpdateIntervalMs', draft.userInterfaceUpdateIntervalMs);
+    add('detectedLabelDuration', draft.detectedLabelDuration);
+    add('warmUpDurationMs', draft.warmUpDurationMs);
+    add('minStepGapMs', draft.minStepGapMs);
+    add('startVectorSize', draft.startVectorSize);
+    add('peakVectorSize', draft.peakVectorSize);
+    add('endVectorSize', draft.endVectorSize);
+    add('meanAbsK', draft.accMeanKConstant);
+    add('maxWindowSize', draft.maxWindowSize);
+    add('lowPassFilterOrder', draft.lowPassFilterOrder);
+    add('lowPassFilterCutoffFreq', draft.lowPassFilterCutoffFreq);
+    add('highPassFilterOrder', draft.highPassFilterOrder);
+    add('highPassFilterCutoffFreq', draft.highPassFilterCutoffFreq);
+    add('accThreshold', draft.accThreshold);
+    add('gyroThreshold', draft.gyroThreshold);
+    add('accScale', draft.accScale);
+    add('gyroScale', draft.gyroScale);
+    add('magScale', draft.magScale);
+    add('heightMeters', draft.heightMeters.toStringAsFixed(2));
   }
-
-  Widget _intField(String label, String key) => TextFormField(
-        controller: _controllers[key],
-        decoration: InputDecoration(labelText: label),
-        keyboardType: TextInputType.number,
-        validator: (v) =>
-            int.tryParse(v ?? '') == null ? 'Enter an integer' : null,
-      );
-
-  Widget _intFieldMini(String label, String key) =>
-      Expanded(child: _intField(label, key));
-
-  Widget _doubleField(String label, String key,
-          {bool requiresPositive = false}) =>
-      TextFormField(
-        controller: _controllers[key],
-        decoration: InputDecoration(labelText: label),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: (v) {
-          final val = double.tryParse(v ?? '');
-          if (val == null) return 'Enter a number';
-          if (requiresPositive && val <= 0) return 'Enter a positive number';
-          return null;
-        },
-      );
-
-  Widget _doubleFieldMini(String label, String key,
-          {bool requiresPositive = false}) =>
-      Expanded(
-        child: _doubleField(label, key, requiresPositive: requiresPositive),
-      );
-
-  Widget _tripleRow(List<Widget> children) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) const SizedBox(width: 8),
-              children[i],
-            ]
-          ],
-        ),
-      );
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 16, bottom: 8),
-        child: Text(
-          text,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium!
-              .copyWith(fontWeight: FontWeight.bold),
-        ),
-      );
 }

@@ -4,13 +4,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:iirjdart/butterworth.dart';
+import 'package:study_step_detection/services/csv_service.dart';
+import 'package:study_step_detection/utils/acc_sample.dart';
 import 'package:study_step_detection/utils/raw_accelerometer_sample.dart';
 import 'package:study_step_detection/utils/sensor_utils.dart';
 import '../config/sensor_config.dart';
 import '../utils/circular_buffer.dart';
 
 class SensorService extends ChangeNotifier {
-  SensorService(this._config) {
+  SensorService(this._config, this._csvService) {
     _initDebounce();
     _initBuffers();
     _initSensors();
@@ -19,19 +21,29 @@ class SensorService extends ChangeNotifier {
   int _lastNotifyTimeMs = 0;
   int _minNotifyIntervalMs = 16;
   bool _updateScheduled = false;
-
+  final CsvService _csvService;
   Timer? _updateTimer;
   Timer? _warmupTimer;
   bool _accDirty = false, _gyroDirty = false, _magDirty = false;
   final ValueNotifier<bool> _isWarmingUp = ValueNotifier(true);
+  final ValueNotifier<bool> isTracking = ValueNotifier(false);
+
   ValueNotifier<bool> get isWarmingUp => _isWarmingUp;
 
   final ValueNotifier<List<RawAccelerometerSample>> rawAccSeries =
       ValueNotifier([]);
   late final CircularBuffer<RawAccelerometerSample> _rawAccBuffer;
+  final CircularBuffer<AccSample> _ramBuffer =
+      CircularBuffer<AccSample>(120 * 100);
+  List<AccSample> get recentAccSamples => _ramBuffer.toList(growable: false);
+  final ValueNotifier<bool> isRecording = ValueNotifier(false);
   final ValueNotifier<bool> peakDetectedNotifier = ValueNotifier(false);
   final ValueNotifier<bool> endDetectedNotifier = ValueNotifier(false);
   final ValueNotifier<bool> fakePeakDetectedNotifier = ValueNotifier(false);
+
+  final List<double> _accGraphBuffer = List.filled(_maxGraphPoints, 0.0);
+  final List<double> _gyroGraphBuffer = List.filled(_maxGraphPoints, 0.0);
+  final List<double> _magGraphBuffer = List.filled(_maxGraphPoints, 0.0);
 
   AccelerometerEvent? _lastAcc;
   GyroscopeEvent? _lastGyro;
@@ -113,6 +125,7 @@ class SensorService extends ChangeNotifier {
   int get _minStepGapMs => _config.minStepGapMs;
 
   late Butterworth _lowPass;
+  late Butterworth _highPass;
   StreamSubscription<AccelerometerEvent>? _accSub;
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<MagnetometerEvent>? _magSub;
@@ -157,8 +170,28 @@ class SensorService extends ChangeNotifier {
 
   void _initFilters() {
     final fs = 1000 / _config.pollingIntervalMs;
-    _lowPass = Butterworth()
-      ..lowPass(_config.filterOrder, fs, _config.filterCutoffFreq);
+
+    if (_config.useLowPassFilter) {
+      _lowPass = Butterworth()
+        ..lowPass(
+          _config.lowPassFilterOrder,
+          fs,
+          _config.lowPassFilterCutoffFreq,
+        );
+    }
+
+    if (_config.useHighPassFilter) {
+      _highPass = Butterworth()
+        ..highPass(
+          _config.highPassFilterOrder,
+          fs,
+          _config.highPassFilterCutoffFreq,
+        );
+    }
+  }
+
+  void toggleTracking() {
+    isTracking.value = !isTracking.value;
   }
 
   void _subscribeSensors() {
@@ -178,6 +211,7 @@ class SensorService extends ChangeNotifier {
   void dispose() {
     _updateTimer?.cancel();
     _warmupTimer?.cancel();
+    _csvService.dispose();
     _accSub?.cancel();
     _gyroSub?.cancel();
     _magSub?.cancel();
@@ -204,6 +238,32 @@ class SensorService extends ChangeNotifier {
     }
   }
 
+  Future<bool> startRecording() async {
+    if (isRecording.value) return true;
+    final ok = await _csvService.startRecording();
+    if (ok) {
+      isRecording.value = true;
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  Future<bool> stopRecording() async {
+    if (!isRecording.value) return true;
+    final ok = await _csvService.stopRecording();
+    if (ok) {
+      isRecording.value = false;
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  void _copyInto(CircularBuffer<double> src, List<double> target) {
+    for (int i = 0; i < src.length; i++) {
+      target[i] = src[i];
+    }
+  }
+
   bool updateConfig(SensorConfig newConfig) {
     newConfig = newConfig.copyWith(
       accScale: SensorUtils.sanitizePos(newConfig.accScale),
@@ -219,8 +279,15 @@ class SensorService extends ChangeNotifier {
     final pollingChanged = newConfig.pollingIntervalMs !=
             _config.pollingIntervalMs ||
         newConfig.useSystemDefaultInterval != _config.useSystemDefaultInterval;
-    final filterChanged = newConfig.filterOrder != _config.filterOrder ||
-        newConfig.filterCutoffFreq != _config.filterCutoffFreq;
+    final filterChanged = newConfig.lowPassFilterOrder !=
+            _config.lowPassFilterOrder ||
+        newConfig.lowPassFilterCutoffFreq != _config.lowPassFilterCutoffFreq ||
+        newConfig.highPassFilterOrder != _config.highPassFilterOrder ||
+        newConfig.highPassFilterCutoffFreq !=
+            _config.highPassFilterCutoffFreq ||
+        newConfig.useLowPassFilter != _config.useLowPassFilter ||
+        newConfig.useHighPassFilter != _config.useHighPassFilter;
+
     final uiIntervalChanged = newConfig.userInterfaceUpdateIntervalMs !=
         _config.userInterfaceUpdateIntervalMs;
     final windowChanged = newConfig.maxWindowSize != _config.maxWindowSize;
@@ -291,7 +358,20 @@ class SensorService extends ChangeNotifier {
     _avgAccMag = _accWinSum / _accWinBuffer.length;
 
     final netMag = mag - _avgAccMag;
-    _filteredAcc = _lowPass.filter(netMag);
+    double filtered = netMag;
+    if (_config.useHighPassFilter) {
+      filtered = _highPass.filter(filtered);
+    }
+    if (_config.useLowPassFilter) {
+      filtered = _lowPass.filter(filtered);
+    }
+    _filteredAcc = filtered;
+
+    if (isRecording.value) {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      _csvService.addCsvRow(
+          '$ts,${accEvent.x},${accEvent.y},${accEvent.z},$_filteredAcc');
+    }
 
     SensorUtils.pushGraph(
         _accelerometerHistory, _config.accScale * _filteredAcc);
@@ -301,8 +381,9 @@ class SensorService extends ChangeNotifier {
         RawAccelerometerSample(accEvent.x, accEvent.y, accEvent.z);
     _rawAccBuffer.add(rawSample);
     rawAccSeries.value = _rawAccBuffer.toList(growable: false);
-
-    _detectStep(_filteredAcc, accEvent.z);
+    if (isTracking.value && !_isWarmingUp.value) {
+      _detectStep(_filteredAcc, accEvent.z);
+    }
   }
 
   void _onGyroscope(GyroscopeEvent e) {
@@ -429,7 +510,7 @@ class SensorService extends ChangeNotifier {
 
       case StepModel.weinbergMethod:
         final diff = amax - amin;
-        return kGenderFactor * pow(diff, _config.weinbergKPowFactor);
+        return kGenderFactor * pow(diff, 1 / 4);
 
       case StepModel.meanAbs:
         double sumAbs = 0.0;
@@ -448,7 +529,7 @@ class SensorService extends ChangeNotifier {
     final elapsed = now - _lastNotifyTimeMs;
 
     if (elapsed < _minNotifyIntervalMs) {
-      // Not enough time passed → schedule later
+      // Not enough time passed => schedule later
       final delay = Duration(milliseconds: _minNotifyIntervalMs - elapsed);
       _updateScheduled = true;
       Future.delayed(delay, _flushSensorUpdates);
@@ -463,17 +544,23 @@ class SensorService extends ChangeNotifier {
 
       bool any = false;
       if (_accDirty) {
-        accSeries.value = _accelerometerHistory.toList(growable: false);
+        _copyInto(_accelerometerHistory, _accGraphBuffer);
+        accSeries.value =
+            _accGraphBuffer.sublist(0, _accelerometerHistory.length);
+
         _accDirty = false;
         any = true;
       }
       if (_gyroDirty) {
-        gyroSeries.value = _gyroHistory.toList(growable: false);
+        _copyInto(_gyroHistory, _gyroGraphBuffer);
+        gyroSeries.value = _gyroGraphBuffer.sublist(0, _gyroHistory.length);
         _gyroDirty = false;
         any = true;
       }
       if (_magDirty) {
-        magSeries.value = _magnetometerHistory.toList(growable: false);
+        _copyInto(_magnetometerHistory, _magGraphBuffer);
+        magSeries.value =
+            _magGraphBuffer.sublist(0, _magnetometerHistory.length);
         _magDirty = false;
         any = true;
       }

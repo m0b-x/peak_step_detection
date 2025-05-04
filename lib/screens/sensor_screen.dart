@@ -1,16 +1,20 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
 import 'package:study_step_detection/config/graph_visibility_config.dart';
 import 'package:study_step_detection/screens/raw_graph_detail_screen.dart';
+import 'package:study_step_detection/services/csv_service.dart';
 import 'package:study_step_detection/utils/raw_accelerometer_sample.dart';
 import '../services/sensor_service.dart';
 import '../widgets/graph_painter.dart';
 import '../widgets/raw_acc_graph_painter.dart';
 import 'graph_detail_screen.dart';
 import 'settings_screen.dart';
+import 'package:path/path.dart' as p;
+import 'package:permission_handler/permission_handler.dart';
 
 class SensorScreen extends StatefulWidget {
   const SensorScreen({super.key});
@@ -20,6 +24,33 @@ class SensorScreen extends StatefulWidget {
 }
 
 class _SensorScreenState extends State<SensorScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _requestStoragePermission();
+  }
+
+  Future<void> _requestStoragePermission() async {
+    if (!await _needsManageStoragePermission()) return;
+
+    final status = await Permission.manageExternalStorage.request();
+
+    if (!mounted) return;
+
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Storage permission is required to save recordings.'),
+        ),
+      );
+    }
+  }
+
+  Future<bool> _needsManageStoragePermission() async {
+    return Platform.isAndroid &&
+        (await Permission.manageExternalStorage.status).isDenied;
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibility = context.watch<GraphVisibilityConfig>();
@@ -95,26 +126,6 @@ class _SensorScreenState extends State<SensorScreen> {
               if (visibility.showMagnetometer)
                 _buildSensorSection(context, svc, 'Magnetometer', Colors.red),
               const SizedBox(height: 24),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.save_alt),
-                label: const Text("Save All Graphs as CSV"),
-                onPressed: () async {
-                  final results = await _saveAllGraphsToCsv({
-                    'Accelerometer': svc.accSeries.value,
-                    'Gyroscope': svc.gyroSeries.value,
-                    'Magnetometer': svc.magSeries.value,
-                  });
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                          content: Text(
-                              results ? 'Saved all graphs' : 'Save failed')),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -128,6 +139,136 @@ class _SensorScreenState extends State<SensorScreen> {
               ),
               const SizedBox(height: 36),
             ],
+          );
+        },
+      ),
+      bottomNavigationBar: Consumer<SensorService>(
+        builder: (context, svc, _) {
+          return BottomAppBar(
+            shape: const CircularNotchedRectangle(),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: SizedBox(
+                height: 56,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Tooltip(
+                        message: svc.isWarmingUp.value
+                            ? 'Please wait, filters are still warming up'
+                            : svc.isTracking.value
+                                ? 'Stop tracking'
+                                : 'Start tracking',
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: svc.isWarmingUp.value
+                                ? Colors.grey
+                                : svc.isTracking.value
+                                    ? Colors.redAccent
+                                    : Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: svc.isTracking.value
+                                ? const Icon(Icons.power_settings_new,
+                                    key: ValueKey('on'))
+                                : const Icon(Icons.play_arrow,
+                                    key: ValueKey('off')),
+                          ),
+                          label: Text(svc.isTracking.value
+                              ? 'Stop Tracking'
+                              : 'Start Tracking'),
+                          onPressed:
+                              svc.isWarmingUp.value ? null : svc.toggleTracking,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Tooltip(
+                        message: svc.isWarmingUp.value
+                            ? 'Please wait, filters are still warming up'
+                            : svc.isRecording.value
+                                ? 'Stop recording'
+                                : 'Start recording',
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: svc.isWarmingUp.value
+                                ? Colors.grey
+                                : svc.isRecording.value
+                                    ? Colors.red
+                                    : Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: Icon(
+                            svc.isRecording.value
+                                ? Icons.stop
+                                : Icons.fiber_manual_record,
+                          ),
+                          label: Text(svc.isRecording.value
+                              ? 'Stop Recording'
+                              : 'Start Recording'),
+                          onPressed: svc.isWarmingUp.value
+                              ? null
+                              : () async {
+                                  final messenger =
+                                      ScaffoldMessenger.of(context);
+                                  final csvService = context.read<CsvService>();
+
+                                  if (svc.isRecording.value) {
+                                    final ok = await svc.stopRecording();
+                                    if (!context.mounted) return;
+
+                                    if (!ok) {
+                                      messenger.showSnackBar(const SnackBar(
+                                          content: Text(
+                                              'Could not stop & save file')));
+                                      return;
+                                    }
+
+                                    final name = p
+                                        .basename(csvService.lastCsvPath ?? '');
+                                    messenger
+                                      ..clearSnackBars()
+                                      ..showSnackBar(
+                                        SnackBar(
+                                          content: Text('Saved $name'),
+                                          action: SnackBarAction(
+                                            label: 'Open',
+                                            onPressed: () {
+                                              _openCsvFileSafely(context,
+                                                  csvService.lastCsvPath);
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                  } else {
+                                    final ok = await svc.startRecording();
+                                    if (!context.mounted) return;
+
+                                    if (!ok) {
+                                      messenger.showSnackBar(const SnackBar(
+                                          content: Text(
+                                              'Recording could not start')));
+                                      return;
+                                    }
+
+                                    messenger
+                                      ..clearSnackBars()
+                                      ..showSnackBar(
+                                        const SnackBar(
+                                            content: Text('Recording started')),
+                                      );
+                                  }
+                                },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           );
         },
       ),
@@ -302,6 +443,29 @@ Widget _sensorDetail({
   );
 }
 
+Future<void> _openCsvFileSafely(BuildContext context, String? path) async {
+  if (path == null) return;
+  final file = File(path);
+  final exists = await file.exists();
+  if (!context.mounted) return;
+
+  if (!exists) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('File does not exist: $path')),
+    );
+    return;
+  }
+
+  final result = await OpenFilex.open(path);
+  if (!context.mounted) return;
+
+  if (result.type != ResultType.done) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open file: ${result.message}')),
+    );
+  }
+}
+
 class _SensorCard extends StatelessWidget {
   const _SensorCard({
     required this.title,
@@ -341,35 +505,5 @@ class _SensorCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-Future<bool> _saveAllGraphsToCsv(Map<String, List<double>> dataMap) async {
-  try {
-    final dir = await getApplicationDocumentsDirectory();
-
-    final List<Future<void>> saveTasks = [];
-
-    for (final entry in dataMap.entries) {
-      final filename = '${entry.key.toLowerCase()}.csv';
-      final file = File('${dir.path}/$filename');
-
-      final csvBuffer = StringBuffer('Index,Value\n');
-      for (int i = 0; i < entry.value.length; i++) {
-        csvBuffer.writeln('$i,${entry.value[i].toStringAsFixed(6)}');
-      }
-
-      saveTasks.add(
-        file
-            .create(recursive: true)
-            .then((f) => f.writeAsString(csvBuffer.toString())),
-      );
-    }
-
-    await Future.wait(saveTasks);
-    return true;
-  } catch (e, stack) {
-    debugPrint('CSV export failed: $e\n$stack');
-    return false;
   }
 }

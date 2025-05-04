@@ -15,12 +15,17 @@ class SensorConfig {
   final int peakVectorSize;
   final int endVectorSize;
 
-  final double weinbergKPowFactor;
   final double accMeanKConstant;
 
-  final int filterOrder;
-  final double filterCutoffFreq;
   final int maxWindowSize;
+
+  final bool useLowPassFilter;
+  final int lowPassFilterOrder;
+  final double lowPassFilterCutoffFreq;
+
+  final bool useHighPassFilter;
+  final int highPassFilterOrder;
+  final double highPassFilterCutoffFreq;
 
   final double accThreshold;
   final double gyroThreshold;
@@ -44,11 +49,14 @@ class SensorConfig {
     this.startVectorSize = 3,
     this.peakVectorSize = 3,
     this.endVectorSize = 2,
-    this.weinbergKPowFactor = 0.25,
     this.accMeanKConstant = 0.75,
-    this.filterOrder = 3,
-    this.filterCutoffFreq = 1.0,
     this.maxWindowSize = 15,
+    this.useLowPassFilter = true,
+    this.lowPassFilterOrder = 3,
+    this.lowPassFilterCutoffFreq = 1.0,
+    this.useHighPassFilter = false,
+    this.highPassFilterOrder = 1,
+    this.highPassFilterCutoffFreq = 0.3,
     this.accThreshold = 0.75,
     this.gyroThreshold = 1.5,
     this.accScale = 1.0,
@@ -70,11 +78,14 @@ class SensorConfig {
     int? startVectorSize,
     int? peakVectorSize,
     int? endVectorSize,
-    double? weinbergKPowFactor,
     double? accMeanKConstant,
-    int? filterOrder,
-    double? filterCutoffFreq,
     int? maxWindowSize,
+    bool? useLowPassFilter,
+    int? lowPassFilterOrder,
+    double? lowPassFilterCutoffFreq,
+    bool? useHighPassFilter,
+    int? highPassFilterOrder,
+    double? highPassFilterCutoffFreq,
     double? accThreshold,
     double? gyroThreshold,
     double? accScale,
@@ -98,11 +109,16 @@ class SensorConfig {
       startVectorSize: startVectorSize ?? this.startVectorSize,
       peakVectorSize: peakVectorSize ?? this.peakVectorSize,
       endVectorSize: endVectorSize ?? this.endVectorSize,
-      weinbergKPowFactor: weinbergKPowFactor ?? this.weinbergKPowFactor,
       accMeanKConstant: accMeanKConstant ?? this.accMeanKConstant,
-      filterOrder: filterOrder ?? this.filterOrder,
-      filterCutoffFreq: filterCutoffFreq ?? this.filterCutoffFreq,
       maxWindowSize: maxWindowSize ?? this.maxWindowSize,
+      useLowPassFilter: useLowPassFilter ?? this.useLowPassFilter,
+      lowPassFilterOrder: lowPassFilterOrder ?? this.lowPassFilterOrder,
+      lowPassFilterCutoffFreq:
+          lowPassFilterCutoffFreq ?? this.lowPassFilterCutoffFreq,
+      useHighPassFilter: useHighPassFilter ?? this.useHighPassFilter,
+      highPassFilterOrder: highPassFilterOrder ?? this.highPassFilterOrder,
+      highPassFilterCutoffFreq:
+          highPassFilterCutoffFreq ?? this.highPassFilterCutoffFreq,
       accThreshold: accThreshold ?? this.accThreshold,
       gyroThreshold: gyroThreshold ?? this.gyroThreshold,
       accScale: accScale ?? this.accScale,
