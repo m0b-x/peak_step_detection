@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:study_step_detection/config/graph_visibility_config.dart';
 import 'package:study_step_detection/screens/raw_graph_detail_screen.dart';
 import 'package:study_step_detection/services/csv_service.dart';
+import 'package:study_step_detection/services/json_service.dart';
 import 'package:study_step_detection/utils/raw_accelerometer_sample.dart';
 import '../services/sensor_service.dart';
 import '../widgets/graph_painter.dart';
@@ -97,21 +98,53 @@ class _SensorScreenState extends State<SensorScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _graphToggleColumn(
-                        'Filtered Accel',
-                        visibility.showAccelerometer,
-                        (v) =>
-                            setState(() => visibility.showAccelerometer = v)),
+                      'Filtered Accel.',
+                      visibility.showAccelerometer,
+                      (v) {
+                        setState(() {
+                          visibility.showAccelerometer = v;
+                          context
+                              .read<SensorService>()
+                              .onGraphToggled('Accelerometer', v);
+                        });
+                      },
+                    ),
                     _graphToggleColumn(
-                        'Raw Accel',
-                        visibility.showRawAccelerometer,
-                        (v) => setState(
-                            () => visibility.showRawAccelerometer = v)),
-                    _graphToggleColumn('Gyroscope', visibility.showGyroscope,
-                        (v) => setState(() => visibility.showGyroscope = v)),
+                      'Raw Accel.',
+                      visibility.showRawAccelerometer,
+                      (v) {
+                        setState(() {
+                          visibility.showRawAccelerometer = v;
+                          context
+                              .read<SensorService>()
+                              .onGraphToggled('Raw Accelerometer', v);
+                        });
+                      },
+                    ),
                     _graphToggleColumn(
-                        'Magnetometer',
-                        visibility.showMagnetometer,
-                        (v) => setState(() => visibility.showMagnetometer = v)),
+                      'Gyroscope',
+                      visibility.showGyroscope,
+                      (v) {
+                        setState(() {
+                          visibility.showGyroscope = v;
+                          context
+                              .read<SensorService>()
+                              .onGraphToggled('Gyroscope', v);
+                        });
+                      },
+                    ),
+                    _graphToggleColumn(
+                      'Magnetometer',
+                      visibility.showMagnetometer,
+                      (v) {
+                        setState(() {
+                          visibility.showMagnetometer = v;
+                          context
+                              .read<SensorService>()
+                              .onGraphToggled('Magnetometer', v);
+                        });
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -243,6 +276,11 @@ class _SensorScreenState extends State<SensorScreen> {
 
                                     final name = p
                                         .basename(csvService.lastCsvPath ?? '');
+                                    await JsonService.convertCsvToJson(
+                                      csvService.lastCsvPath!,
+                                      svc.currentConfig,
+                                    );
+
                                     messenger
                                       ..clearSnackBars()
                                       ..showSnackBar(

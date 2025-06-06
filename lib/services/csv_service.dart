@@ -84,8 +84,12 @@ class CsvService {
       );
 
       final newPath = p.join(downloadsPath, p.basename(_lastCsvPath!));
-      final newFile = await File(_lastCsvPath!).copy(newPath);
-      _lastCsvPath = newFile.path;
+      if (_lastCsvPath != newPath) {
+        final newFile = await File(_lastCsvPath!).copy(newPath);
+        _lastCsvPath = newFile.path;
+      } else {
+        debugPrint('CsvService: File already in Downloads folder.');
+      }
 
       debugPrint('CsvService: File saved to Downloads: $_lastCsvPath');
       return true;

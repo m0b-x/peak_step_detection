@@ -279,6 +279,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (v) => setState(() => _isMale = v ?? true),
               ),
             ]),
+            _card('Test Conditions', [
+              Text('Smartphone Position',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall!
+                      .copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<SmartphonePosition>(
+                decoration: const InputDecoration(labelText: 'Position'),
+                value: draft.smartphonePosition,
+                items: const [
+                  DropdownMenuItem(
+                      value: SmartphonePosition.pocket, child: Text('Pocket')),
+                  DropdownMenuItem(
+                      value: SmartphonePosition.handReading,
+                      child: Text('Hand-Reading')),
+                  DropdownMenuItem(
+                      value: SmartphonePosition.handSwinging,
+                      child: Text('Hand-Swinging')),
+                  DropdownMenuItem(
+                      value: SmartphonePosition.bag, child: Text('Bag')),
+                ],
+                onChanged: (v) => setState(
+                    () => draft = draft.copyWith(smartphonePosition: v)),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<WalkingSpeed>(
+                decoration: const InputDecoration(labelText: 'Walking Speed'),
+                value: draft.walkingSpeed,
+                items: const [
+                  DropdownMenuItem(
+                      value: WalkingSpeed.slow, child: Text('Slow')),
+                  DropdownMenuItem(
+                      value: WalkingSpeed.normal, child: Text('Normal')),
+                  DropdownMenuItem(
+                      value: WalkingSpeed.fast, child: Text('Fast')),
+                ],
+                onChanged: (v) =>
+                    setState(() => draft = draft.copyWith(walkingSpeed: v)),
+              ),
+              const SizedBox(height: 16),
+              _doubleField('Path Length (m)', 'pathLength', positive: true),
+              _doubleField('Leg Length (m)', 'legLength', positive: true),
+            ]),
           ],
         ),
       ),
@@ -339,7 +383,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             int.parse(_controllers['startVectorSize']!.text.trim()),
         peakVectorSize: int.parse(_controllers['peakVectorSize']!.text.trim()),
         endVectorSize: int.parse(_controllers['endVectorSize']!.text.trim()),
-        accMeanKConstant: double.parse(_controllers['meanAbsK']!.text.trim()),
+        accMeanKConstant: draft.stepModel == StepModel.meanAbs
+            ? double.parse(_controllers['meanAbsK']!.text.trim())
+            : draft.accMeanKConstant,
         maxWindowSize: int.parse(_controllers['maxWindowSize']!.text.trim()),
         useLowPassFilter: draft.useLowPassFilter,
         lowPassFilterOrder:
@@ -359,6 +405,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         heightMeters: double.parse(_controllers['heightMeters']!.text.trim()),
         isMale: _isMale,
         stepModel: draft.stepModel,
+        pathLength: double.parse(_controllers['pathLength']!.text.trim()),
+        legLength: double.parse(_controllers['legLength']!.text.trim()),
+        smartphonePosition: draft.smartphonePosition,
+        walkingSpeed: draft.walkingSpeed,
       );
     });
 
@@ -374,6 +424,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     void add(String k, dynamic v) =>
         _controllers[k] = TextEditingController(text: v.toString());
 
+    add('pathLength', draft.pathLength);
+    add('legLength', draft.legLength);
     add('pollingIntervalMs', draft.pollingIntervalMs);
     add('userInterfaceUpdateIntervalMs', draft.userInterfaceUpdateIntervalMs);
     add('detectedLabelDuration', draft.detectedLabelDuration);

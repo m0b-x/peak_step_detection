@@ -1,6 +1,15 @@
 enum StepModel { staticHeightAndGender, weinbergMethod, meanAbs }
 
+enum SmartphonePosition { pocket, handReading, handSwinging, bag }
+
+enum WalkingSpeed { slow, normal, fast }
+
 class SensorConfig {
+  final SmartphonePosition smartphonePosition;
+  final WalkingSpeed walkingSpeed;
+  final double pathLength;
+  final double legLength;
+
   final bool useSystemDefaultInterval;
   final int pollingIntervalMs;
   final int userInterfaceUpdateIntervalMs;
@@ -38,6 +47,10 @@ class SensorConfig {
   final double heightMeters;
 
   const SensorConfig({
+    this.smartphonePosition = SmartphonePosition.handReading,
+    this.walkingSpeed = WalkingSpeed.normal,
+    this.pathLength = 100,
+    this.legLength = -1,
     this.useSystemDefaultInterval = false,
     this.pollingIntervalMs = 100,
     this.userInterfaceUpdateIntervalMs = 100,
@@ -67,6 +80,10 @@ class SensorConfig {
   });
 
   SensorConfig copyWith({
+    SmartphonePosition? smartphonePosition,
+    WalkingSpeed? walkingSpeed,
+    double? pathLength,
+    double? legLength,
     bool? useSystemDefaultInterval,
     int? pollingIntervalMs,
     int? userInterfaceUpdateIntervalMs,
@@ -95,6 +112,10 @@ class SensorConfig {
     double? heightMeters,
   }) {
     return SensorConfig(
+      smartphonePosition: smartphonePosition ?? this.smartphonePosition,
+      walkingSpeed: walkingSpeed ?? this.walkingSpeed,
+      pathLength: pathLength ?? this.pathLength,
+      legLength: legLength ?? this.legLength,
       useSystemDefaultInterval:
           useSystemDefaultInterval ?? this.useSystemDefaultInterval,
       pollingIntervalMs: pollingIntervalMs ?? this.pollingIntervalMs,

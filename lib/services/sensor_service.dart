@@ -45,6 +45,11 @@ class SensorService extends ChangeNotifier {
   final List<double> _gyroGraphBuffer = List.filled(_maxGraphPoints, 0.0);
   final List<double> _magGraphBuffer = List.filled(_maxGraphPoints, 0.0);
 
+  bool _accVisible = true;
+  bool _rawAccVisible = true;
+  bool _gyroVisible = true;
+  bool _magVisible = true;
+
   AccelerometerEvent? _lastAcc;
   GyroscopeEvent? _lastGyro;
   MagnetometerEvent? _lastMag;
@@ -238,6 +243,27 @@ class SensorService extends ChangeNotifier {
     }
   }
 
+  void onGraphToggled(String graph, bool isVisible) {
+    switch (graph) {
+      case 'Accelerometer':
+        _accVisible = isVisible;
+        if (!isVisible) accSeries.value = [];
+        break;
+      case 'Raw Accelerometer':
+        _rawAccVisible = isVisible;
+        if (!isVisible) rawAccSeries.value = [];
+        break;
+      case 'Gyroscope':
+        _gyroVisible = isVisible;
+        if (!isVisible) gyroSeries.value = [];
+        break;
+      case 'Magnetometer':
+        _magVisible = isVisible;
+        if (!isVisible) magSeries.value = [];
+        break;
+    }
+  }
+
   Future<bool> startRecording() async {
     if (isRecording.value) return true;
     final ok = await _csvService.startRecording();
@@ -379,8 +405,10 @@ class SensorService extends ChangeNotifier {
 
     final rawSample =
         RawAccelerometerSample(accEvent.x, accEvent.y, accEvent.z);
-    _rawAccBuffer.add(rawSample);
-    rawAccSeries.value = _rawAccBuffer.toList(growable: false);
+    if (_rawAccVisible) {
+      _rawAccBuffer.add(rawSample);
+      rawAccSeries.value = _rawAccBuffer.toList(growable: false);
+    }
     if (isTracking.value && !_isWarmingUp.value) {
       _detectStep(_filteredAcc, accEvent.z);
     }
@@ -543,21 +571,20 @@ class SensorService extends ChangeNotifier {
       _updateScheduled = false;
 
       bool any = false;
-      if (_accDirty) {
+      if (_accDirty && _accVisible) {
         _copyInto(_accelerometerHistory, _accGraphBuffer);
         accSeries.value =
             _accGraphBuffer.sublist(0, _accelerometerHistory.length);
-
         _accDirty = false;
         any = true;
       }
-      if (_gyroDirty) {
+      if (_gyroDirty && _gyroVisible) {
         _copyInto(_gyroHistory, _gyroGraphBuffer);
         gyroSeries.value = _gyroGraphBuffer.sublist(0, _gyroHistory.length);
         _gyroDirty = false;
         any = true;
       }
-      if (_magDirty) {
+      if (_magDirty && _magVisible) {
         _copyInto(_magnetometerHistory, _magGraphBuffer);
         magSeries.value =
             _magGraphBuffer.sublist(0, _magnetometerHistory.length);
