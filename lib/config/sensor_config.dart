@@ -5,6 +5,7 @@ enum SmartphonePosition { pocket, handReading, handSwinging, bag }
 enum WalkingSpeed { slow, normal, fast }
 
 class SensorConfig {
+  final String name;
   final SmartphonePosition smartphonePosition;
   final WalkingSpeed walkingSpeed;
   final double pathLength;
@@ -47,6 +48,7 @@ class SensorConfig {
   final double heightMeters;
 
   const SensorConfig({
+    this.name = 'person1',
     this.smartphonePosition = SmartphonePosition.handReading,
     this.walkingSpeed = WalkingSpeed.normal,
     this.pathLength = 100,
@@ -80,6 +82,7 @@ class SensorConfig {
   });
 
   SensorConfig copyWith({
+    String? name,
     SmartphonePosition? smartphonePosition,
     WalkingSpeed? walkingSpeed,
     double? pathLength,
@@ -112,6 +115,7 @@ class SensorConfig {
     double? heightMeters,
   }) {
     return SensorConfig(
+      name: name ?? this.name,
       smartphonePosition: smartphonePosition ?? this.smartphonePosition,
       walkingSpeed: walkingSpeed ?? this.walkingSpeed,
       pathLength: pathLength ?? this.pathLength,

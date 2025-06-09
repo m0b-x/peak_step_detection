@@ -23,7 +23,12 @@ class GraphDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: Text('$title Graph')),
+      appBar: AppBar(
+        title: Text(
+          '$title Graph',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
       body: Consumer<SensorService>(
         builder: (_, svc, __) {
           final data = getSensorData(svc, title);

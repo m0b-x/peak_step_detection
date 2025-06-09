@@ -57,6 +57,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Widget _textField(String label, String key) => TextFormField(
+        controller: _controllers[key]!,
+        decoration: InputDecoration(labelText: label),
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            return 'Please enter a value';
+          }
+          return null;
+        },
+      );
+
   Widget _intField(String label, String key) =>
       SettingsFieldUtils.intField(controller: _controllers[key]!, label: label);
 
@@ -67,11 +78,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         requiresPositive: positive,
       );
 
+  Widget _heightField() =>
+      _doubleField('Height (m)', 'heightMeters', positive: true);
+
+  Widget _genderDropdown() => DropdownButtonFormField<bool>(
+        decoration: const InputDecoration(labelText: 'Gender'),
+        value: _isMale,
+        items: const [
+          DropdownMenuItem(value: true, child: Text('Male')),
+          DropdownMenuItem(value: false, child: Text('Female')),
+        ],
+        onChanged: (v) => setState(() => _isMale = v ?? true),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: const Text(
+          'Settings',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             tooltip: _allExpanded() ? 'Collapse All' : 'Expand All',
@@ -97,27 +124,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _card('User Interface', [
               Text('UI Refresh Rate',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _intField(
                   'UI update interval (ms)', 'userInterfaceUpdateIntervalMs'),
               const Divider(height: 24),
               Text('Flashing Time',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _intField('Detected label flash (ms)', 'detectedLabelDuration'),
               const Divider(height: 24),
               Text('Scaling Factors',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               SettingsFieldUtils.tripleRow([
                 _doubleField('Acc', 'accScale', positive: true),
@@ -127,10 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
             _card('Sampling', [
               Text('Sensor Sampling Rate',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _intField('Polling interval (ms)', 'pollingIntervalMs'),
               SwitchListTile(
@@ -141,11 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
             _card('Filtering', [
-              Text('Warm-up',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+              Text('Warm-up', style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Wait for sensors to warm up'),
@@ -156,18 +167,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _intField('Warm-up duration (ms)', 'warmUpDurationMs'),
               const Divider(height: 24),
               Text('Window Size',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _intField('Running-mean window (samples)', 'maxWindowSize'),
               const Divider(height: 24),
               Text('Low Pass Filter',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Use low-pass Butterworth filter'),
@@ -182,10 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(),
               ]),
               Text('HIgh Pass FIlter',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               SwitchListTile(
                 title: const Text('Use high-pass Butterworth filter'),
                 value: draft.useHighPassFilter,
@@ -201,18 +203,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
             _card('Step Detection', [
               Text('Detection Threshold',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _doubleField('Accelerometer threshold', 'accThreshold'),
               const SizedBox(height: 24),
               Text('Vector Size',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               SettingsFieldUtils.tripleRow([
                 _intField('Start vector', 'startVectorSize'),
@@ -221,20 +217,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
               const SizedBox(height: 24),
               Text('Fake Step Detection',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               _doubleField('Gyroscope threshold', 'gyroThreshold'),
               _intField('Min Step Gap (ms)', 'minStepGapMs'),
             ]),
             _card('Step Length Estimation', [
               Text('Step Length Model',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               DropdownButtonFormField<StepModel>(
                 decoration: const InputDecoration(labelText: 'Model'),
@@ -263,31 +253,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _doubleField('k3 (mean-abs scale)', 'meanAbsK', positive: true),
               const SizedBox(height: 32),
               Text('User Details',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
-              _doubleField('Height (m)', 'heightMeters', positive: true),
-              DropdownButtonFormField<bool>(
-                decoration: const InputDecoration(labelText: 'Gender'),
-                value: _isMale,
-                items: const [
-                  DropdownMenuItem(value: true, child: Text('Male')),
-                  DropdownMenuItem(value: false, child: Text('Female')),
-                ],
-                onChanged: (v) => setState(() => _isMale = v ?? true),
-              ),
+              _heightField(),
+              _genderDropdown(),
             ]),
             _card('Test Conditions', [
+              Text('Sensor Sampling Rate',
+                  style: Theme.of(context).textTheme.titleSmall!),
+              const SizedBox(height: 8),
+              _intField('Polling interval (ms)', 'pollingIntervalMs'),
+              SwitchListTile(
+                title: const Text('Use system default interval'),
+                value: draft.useSystemDefaultInterval,
+                onChanged: (v) => setState(
+                    () => draft = draft.copyWith(useSystemDefaultInterval: v)),
+              ),
               Text('Smartphone Position',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall!
-                      .copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context).textTheme.titleSmall!),
               const SizedBox(height: 8),
               DropdownButtonFormField<SmartphonePosition>(
-                decoration: const InputDecoration(labelText: 'Position'),
+                decoration: const InputDecoration(
+                  labelText: 'Position',
+                ),
                 value: draft.smartphonePosition,
                 items: const [
                   DropdownMenuItem(
@@ -305,6 +293,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     () => draft = draft.copyWith(smartphonePosition: v)),
               ),
               const SizedBox(height: 16),
+              _textField('Name', 'name'),
+              const SizedBox(height: 16),
               DropdownButtonFormField<WalkingSpeed>(
                 decoration: const InputDecoration(labelText: 'Walking Speed'),
                 value: draft.walkingSpeed,
@@ -319,6 +309,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (v) =>
                     setState(() => draft = draft.copyWith(walkingSpeed: v)),
               ),
+              const SizedBox(height: 16),
+              _heightField(),
+              const SizedBox(height: 16),
+              _genderDropdown(),
               const SizedBox(height: 16),
               _doubleField('Path Length (m)', 'pathLength', positive: true),
               _doubleField('Leg Length (m)', 'legLength', positive: true),
@@ -345,11 +339,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Icon(Icons.label_important,
                   color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
-              Text(title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium!
-                      .copyWith(fontWeight: FontWeight.bold)),
+              Text(title, style: Theme.of(context).textTheme.titleMedium!),
             ],
           ),
           children: [
@@ -370,6 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       draft = draft.copyWith(
+        name: _controllers['name']!.text.trim(),
         pollingIntervalMs:
             int.parse(_controllers['pollingIntervalMs']!.text.trim()),
         userInterfaceUpdateIntervalMs: int.parse(
@@ -413,17 +404,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     final needsWarmup = context.read<SensorService>().updateConfig(draft);
+
     if (!needsWarmup && context.mounted) {
       SettingsFieldUtils.showToast(context, 'Settings applied instantly');
     }
 
-    Navigator.of(context).pop();
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _initControllers() {
     void add(String k, dynamic v) =>
         _controllers[k] = TextEditingController(text: v.toString());
 
+    add('name', draft.name);
     add('pathLength', draft.pathLength);
     add('legLength', draft.legLength);
     add('pollingIntervalMs', draft.pollingIntervalMs);

@@ -8,6 +8,7 @@ import 'package:study_step_detection/config/sensor_config.dart';
 
 class JsonService {
   static Future<void> saveJson({
+    required String name,
     required String smartphonePosition,
     required String walkingSpeed,
     required double height,
@@ -20,6 +21,7 @@ class JsonService {
     List<double>? strideLengths,
   }) async {
     final jsonData = {
+      'name': name,
       'smartphone_position': smartphonePosition,
       'walking_speed': walkingSpeed,
       if (walkingSpeed == 'preferred' && pathLength != null)
@@ -112,6 +114,7 @@ class JsonService {
     debugPrint('JsonService: Parsed ${xData.length} accelerometer entries');
 
     await saveJson(
+      name: config.name,
       smartphonePosition: config.smartphonePosition.name,
       walkingSpeed: config.walkingSpeed.name,
       height: config.heightMeters,
