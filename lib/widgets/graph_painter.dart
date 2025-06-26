@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:math' show max;
 
 class GraphPainter extends CustomPainter {
-  GraphPainter(this.points, this.color, {this.threshold});
+  GraphPainter(
+    this.points,
+    this.color, {
+    this.threshold,
+    this.scaleData = true,
+  });
 
   final List<double> points;
   final Color color;
   final double? threshold;
+  final bool scaleData;
 
-  /* simple cache: yScale*100 → list of 6 label painters */
   static final _cache = <int, List<TextPainter>>{};
 
   @override
@@ -29,7 +34,7 @@ class GraphPainter extends CustomPainter {
 
     final dx = graphW / (points.length - 1);
     final maxVal = points.fold<double>(0, (m, e) => max(m, e.abs()));
-    final yScale = maxVal == 0 ? 1 : maxVal;
+    final yScale = scaleData ? (maxVal == 0 ? 1 : maxVal) : 1.0;
 
     if (threshold != null && threshold!.abs() <= yScale) {
       final thresholdY = size.height * (0.5 - threshold! / yScale / 2);
@@ -45,7 +50,6 @@ class GraphPainter extends CustomPainter {
       );
     }
 
-    /* ───── grid & labels ───── */
     const gridLines = 5;
     final cacheKey = (yScale * 100).round();
     final labels = _cache.putIfAbsent(cacheKey, () {
@@ -67,7 +71,6 @@ class GraphPainter extends CustomPainter {
       labels[i].paint(canvas, Offset(0, y - labels[i].height / 2));
     }
 
-    /* axes */
     final midY = size.height / 2;
     canvas.drawLine(Offset(leftPad, midY), Offset(size.width, midY), axisPaint);
 
@@ -80,7 +83,6 @@ class GraphPainter extends CustomPainter {
     _drawStaticLabel(canvas, 'Time →', Offset(size.width - 55, midY + 4),
         const TextStyle(color: Colors.grey, fontSize: 12));
 
-    /* line path */
     final path = Path();
     for (var i = 0; i < points.length; i++) {
       final x = leftPad + i * dx;
@@ -100,5 +102,8 @@ class GraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(GraphPainter old) =>
-      old.points != points || old.color != color || old.threshold != threshold;
+      old.points != points ||
+      old.color != color ||
+      old.threshold != threshold ||
+      old.scaleData != scaleData;
 }

@@ -5,6 +5,7 @@ enum SmartphonePosition { pocket, handReading, handSwinging, bag }
 enum WalkingSpeed { slow, normal, fast }
 
 class SensorConfig {
+  final bool scaleGraphs;
   final String name;
   final SmartphonePosition smartphonePosition;
   final WalkingSpeed walkingSpeed;
@@ -48,6 +49,7 @@ class SensorConfig {
   final double heightMeters;
 
   const SensorConfig({
+    this.scaleGraphs = true,
     this.name = 'person1',
     this.smartphonePosition = SmartphonePosition.handReading,
     this.walkingSpeed = WalkingSpeed.normal,
@@ -82,6 +84,7 @@ class SensorConfig {
   });
 
   SensorConfig copyWith({
+    bool? scaleGraphs,
     String? name,
     SmartphonePosition? smartphonePosition,
     WalkingSpeed? walkingSpeed,
@@ -115,6 +118,7 @@ class SensorConfig {
     double? heightMeters,
   }) {
     return SensorConfig(
+      scaleGraphs: scaleGraphs ?? this.scaleGraphs,
       name: name ?? this.name,
       smartphonePosition: smartphonePosition ?? this.smartphonePosition,
       walkingSpeed: walkingSpeed ?? this.walkingSpeed,

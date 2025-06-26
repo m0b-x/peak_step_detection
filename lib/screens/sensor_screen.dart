@@ -555,7 +555,13 @@ class _SensorCard extends StatelessWidget {
               child: ValueListenableBuilder<List<double>>(
                 valueListenable: notifier,
                 builder: (_, data, __) => CustomPaint(
-                  painter: GraphPainter(data, color, threshold: threshold),
+                  painter: GraphPainter(
+                    data,
+                    color,
+                    threshold: threshold,
+                    scaleData:
+                        context.read<SensorService>().currentConfig.scaleGraphs,
+                  ),
                 ),
               ),
             ),

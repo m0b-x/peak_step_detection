@@ -142,6 +142,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _doubleField('Gyro', 'gyroScale', positive: true),
                 _doubleField('Mag', 'magScale', positive: true),
               ]),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Scale graph data (auto-fit)'),
+                value: draft.scaleGraphs,
+                onChanged: (v) =>
+                    setState(() => draft = draft.copyWith(scaleGraphs: v)),
+              ),
             ]),
             _card('Sampling', [
               Text('Sensor Sampling Rate',
