@@ -1,8 +1,8 @@
-![github_banner](https://github.com/user-attachments/assets/5009554d-dce3-4770-bcaa-9d6951f0a4ae)
+![github_banner-removebg](https://github.com/user-attachments/assets/e6d8a6be-2bb3-48bf-a32d-4468f39f52d3)
 
 # Peak Step Detection – Didactic Step Detection App
 
-**Peak Step Detectio** is a lightweight educational mobile application designed for collecting, visualizing, and contributing step detection data. It includes both classical step detection logic and multiple step length estimation models, making it ideal for prototyping, academic exploration, and dataset enrichment.
+**Peak Step Detection** is a lightweight educational mobile application designed for collecting, visualizing, and contributing step detection data. It includes both classical step detection logic and multiple step length estimation models, making it ideal for prototyping, academic exploration, and dataset enrichment.
 
 ## 🔧 Features
 
