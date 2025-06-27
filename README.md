@@ -48,6 +48,13 @@ Data collected can be exported in **CSV** or **JSON** format, making it compatib
 3. Configure personal attributes in Settings
 4. Start walking & export your data!
 
+## 📬 Author & Contact
+
+This program was developed by **Alexandru Zamfir**.  
+If you have questions, suggestions, or want to collaborate, feel free to reach out:
+
+📧 [alexandru.zamfir@proton.me](mailto:alexandru.zamfir@proton.me)
+
 ---
 
 > Developed as part of a Master's Dissertation on smartphone-based pedestrian tracking using inertial sensors.
